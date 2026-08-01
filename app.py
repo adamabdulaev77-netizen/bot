@@ -47,7 +47,7 @@ import aiohttp
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # Твой Telegram ID
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))  # Твой Telegram ID
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
