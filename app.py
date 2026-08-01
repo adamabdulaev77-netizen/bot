@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ULTIMATE ENTERPRISE ENGINE (FLASK + OPENCV + AIOGRAM)
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (FLASK + OPENCV + AIOGRAM)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -65,12 +65,11 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("AestheticEnterprise")
+logger = logging.getLogger("AnimusMatrixEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
 
-# Глобальный объект бота для отправки медиа админу из Flask
 global_bot = Bot(token=BOT_TOKEN)
 
 # ==============================================================================
@@ -145,8 +144,8 @@ db = DatabaseManager(DB_PATH)
 # ==============================================================================
 def generate_looksmaxing_report(rating: float, sym_pct: float, sharp_val: float, harm_val: float) -> Dict[str, str]:
     if rating >= 8.5:
-        pros = f"Выдающаяся пропорциональная симметрия овала лица ({sym_pct}%). Идеально очерченная челюстная дуга, высокий индекс четкости контуров ({sharp_val}/10.0)."
-        cons = "Минорные недочеты в распределении освещения кадра."
+        pros = f"Синхронизация с идеальной моделью Анимуса ({sym_pct}%). Идеально очерченная челюстная дуга, высокий индекс четкости контуров ({sharp_val}/10.0)."
+        cons = "Минорные недочеты в распределении цифрового освещения кадра."
         recs = "Поддерживай процент жира в организме в пределах 10-12%. Соблюдай питьевой режим и сохраняй осанку (мьюинг)."
     elif rating >= 7.0:
         pros = f"Высокий гармонический потенциал структуры лица. Симметрия овала составляет {sym_pct}%."
@@ -166,7 +165,7 @@ def generate_looksmaxing_report(rating: float, sym_pct: float, sharp_val: float,
 def analyze_opencv(image_path: str):
     img = cv2.imread(image_path)
     if img is None:
-        return 5.0, "LTN", "cat-LTN", "#ffd11a", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, generate_looksmaxing_report(5.0, 50.0, 5.0, 5.0)
+        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, generate_looksmaxing_report(5.0, 50.0, 5.0, 5.0)
 
     h, w = img.shape[:2]
     max_dim = 800
@@ -193,12 +192,12 @@ def analyze_opencv(image_path: str):
     raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
     rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
 
-    if rating < 3.0: cat, cat_cls, color = "SUB 3", "cat-SUB3", "#ff4d4d"
-    elif rating < 5.0: cat, cat_cls, color = "SUB 5", "cat-SUB5", "#ff944d"
-    elif rating < 6.0: cat, cat_cls, color = "LTN", "cat-LTN", "#ffd11a"
-    elif rating < 7.0: cat, cat_cls, color = "MTN", "cat-MTN", "#a6ff1a"
-    elif rating < 8.0: cat, cat_cls, color = "HTN", "cat-HTN", "#2eb82e"
-    elif rating < 10.0: cat, cat_cls, color = "CHAD", "cat-CHAD", "#00ccff"
+    if rating < 3.0: cat, cat_cls, color = "SUB 3", "cat-SUB3", "#ff3333"
+    elif rating < 5.0: cat, cat_cls, color = "SUB 5", "cat-SUB5", "#ff8833"
+    elif rating < 6.0: cat, cat_cls, color = "LTN", "cat-LTN", "#e6e6e6"
+    elif rating < 7.0: cat, cat_cls, color = "MTN", "cat-MTN", "#cccccc"
+    elif rating < 8.0: cat, cat_cls, color = "HTN", "cat-HTN", "#ffffff"
+    elif rating < 10.0: cat, cat_cls, color = "CHAD", "cat-CHAD", "#00e5ff"
     else: cat, cat_cls, color = "TRUE ADAM", "cat-TRUE_ADAM", "#ffd700"
 
     details = {"symmetry": sym_pct, "sharpness": sharp_score, "harmony": harm_score}
@@ -277,7 +276,7 @@ async def btn_categories(message: Message):
     await message.answer(categories_text, parse_mode="Markdown")
 
 async def process_photo_message(message: Message, file_id: str):
-    status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото и высчитывает векторы...**", parse_mode="Markdown")
+    status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото в Анимус...**", parse_mode="Markdown")
     try:
         file_info = await message.bot.get_file(file_id)
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
@@ -322,7 +321,7 @@ async def process_photo_message(message: Message, file_id: str):
         await db.add_scan(scan_id, message.from_user.id, rating, category, saved_photo_path)
 
         await status_msg.edit_text(
-            f"✅ **Анализ геометрии лица завершен!**\n\n"
+            f"✅ **Анализ генетического кода завершен!**\n\n"
             f"📊 **Твой рейтинг:** `{rating} / 10`\n"
             f"🏷 **Категория:** `{category}`\n\n"
             f"👇 **Нажми на кнопку ниже, чтобы открыть интерактивную карточку:**",
@@ -358,7 +357,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 HIGH-TECH NEON GLASSMORPHISM & 3D WIREFRAME FRONTEND
+# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE (1000+ LINES OF CODE)
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -366,141 +365,507 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aesthetic AI — Neural Face Engine</title>
+    <title>ANIMUS 3.0 — Memory Corridor Synchronization</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-dark: #030307;
-            --accent-purple: #9333ea;
-            --accent-cyan: #06b6d4;
-            --glass-bg: rgba(13, 13, 22, 0.78);
-            --glass-border: rgba(255, 255, 255, 0.12);
-            --glass-inner: rgba(255, 255, 255, 0.03);
+            --animus-white: #ffffff;
+            --animus-silver: #e0e6ed;
+            --animus-gray: rgba(255, 255, 255, 0.15);
+            --animus-glow: rgba(255, 255, 255, 0.85);
+            --animus-cyan: #00f0ff;
+            --animus-card: rgba(12, 16, 24, 0.82);
+            --animus-border: rgba(255, 255, 255, 0.25);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; user-select: none; }
-        body { background: var(--bg-dark); color: #ffffff; min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow-x: hidden; padding: 20px 12px; }
-        
-        #bg-canvas, #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        #bg-canvas { z-index: 0; }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Rajdhani', sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #05070a;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            position: relative;
+            padding: 20px 12px;
+        }
+
+        /* Canvas Матрицы Анимуса */
+        #animus-canvas, #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #animus-canvas { z-index: 0; }
         #confetti-canvas { z-index: 100; }
 
-        .app-card { position: relative; z-index: 10; width: 100%; max-width: 520px; background: var(--glass-bg); backdrop-filter: blur(40px); border: 1px solid var(--glass-border); border-radius: 36px; padding: 32px 24px; box-shadow: 0 40px 100px rgba(0, 0, 0, 0.9); }
-        .header { text-align: center; margin-bottom: 24px; }
-        .header .badge { display: inline-flex; padding: 6px 16px; border-radius: 100px; background: rgba(147, 51, 234, 0.2); border: 1px solid rgba(255, 255, 255, 0.15); font-size: 0.75rem; font-weight: 800; color: #d8b4fe; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; }
-        .header h1 { font-size: 2.1rem; font-weight: 900; background: linear-gradient(135deg, #ffffff, #cbd5e1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .header p { font-size: 0.88rem; color: rgba(255, 255, 255, 0.55); margin-top: 6px; }
+        /* Эффект Scanlines (ЭЛТ-монитор Анимуса) */
+        .scanline-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
 
-        .upload-area { border: 2px dashed rgba(255, 255, 255, 0.18); border-radius: 28px; padding: 40px 20px; text-align: center; cursor: pointer; background: var(--glass-inner); transition: all 0.3s; }
-        .upload-area:hover { border-color: var(--accent-purple); background: rgba(147, 51, 234, 0.08); }
-        .btn-select-file { display: inline-block; background: linear-gradient(135deg, #9333ea, #06b6d4); color: #ffffff; padding: 14px 32px; border-radius: 16px; font-weight: 800; font-size: 0.95rem; margin-top: 15px; }
+        /* Главная карточка Animus */
+        .animus-card {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 530px;
+            background: var(--animus-card);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--animus-border);
+            border-radius: 20px;
+            padding: 32px 24px;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.12),
+                        inset 0 0 20px rgba(255, 255, 255, 0.05);
+            animation: animusAppear 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            clip-path: polygon(0 0, 95% 0, 100% 5%, 100% 100%, 5% 100%, 0 95%);
+        }
+
+        @keyframes animusAppear {
+            from { opacity: 0; transform: scale(0.92) translateY(30px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Декоративные уголки Абстерго */
+        .animus-corner {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            pointer-events: none;
+        }
+        .top-left { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+        .bottom-right { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .header .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 16px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.1rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+        }
+        .header p {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 6px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Загрузочный прямоугольник Анимуса */
+        .upload-box {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 45px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            background: rgba(255, 255, 255, 0.02);
+            position: relative;
+            overflow: hidden;
+        }
+        .upload-box:hover {
+            border-color: #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
+        }
+        .upload-icon {
+            font-size: 2.8rem;
+            margin-bottom: 12px;
+            color: #ffffff;
+            text-shadow: 0 0 15px #ffffff;
+        }
+        .upload-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+        .upload-subtitle {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+            margin-bottom: 22px;
+        }
+        .btn-animus {
+            display: inline-block;
+            background: #ffffff;
+            color: #000000;
+            padding: 14px 36px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border: none;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+        .btn-animus:hover {
+            background: var(--animus-cyan);
+            box-shadow: 0 0 30px var(--animus-cyan);
+        }
         #fileInput { display: none; }
 
-        .loading-box { display: none; text-align: center; padding: 35px 15px; }
-        .spinner-ring { width: 54px; height: 54px; border: 4px solid rgba(255,255,255,0.1); border-left-color: var(--accent-purple); border-radius: 50%; margin: 0 auto 18px; animation: spin 0.85s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Лоадер Скан-Лазер */
+        .loader-screen {
+            display: none;
+            text-align: center;
+            padding: 40px 10px;
+        }
+        .laser-loader {
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .laser-line {
+            position: absolute;
+            top: 0;
+            left: -50%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #ffffff, transparent);
+            animation: laserScan 1.2s infinite ease-in-out;
+        }
+        @keyframes laserScan {
+            0% { left: -50%; }
+            100% { left: 100%; }
+        }
+        .loader-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
 
-        .result-view { display: none; flex-direction: column; align-items: center; gap: 24px; }
-        .photo-frame { width: 100%; height: 340px; border-radius: 24px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.15); background: #000000; display: flex; align-items: center; justify-content: center; }
-        .photo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        /* Экран Результатов */
+        .result-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+        }
 
-        .gauge-container { position: relative; width: 190px; height: 190px; }
-        .gauge-container svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-        .gauge-track { fill: none; stroke: rgba(255, 255, 255, 0.06); stroke-width: 14; }
-        .gauge-bar { fill: none; stroke-width: 14; stroke-linecap: round; stroke-dasharray: 565.48; stroke-dashoffset: 565.48; transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1); }
-        .gauge-inner-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
-        .score-val { font-size: 3.6rem; font-weight: 900; line-height: 1; }
-        .score-sub { font-size: 0.85rem; color: rgba(255, 255, 255, 0.45); font-weight: 700; }
+        .photo-container {
+            width: 100%;
+            height: 330px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: #000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+        }
+        .photo-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
 
-        .category-pill { padding: 12px 34px; border-radius: 100px; font-size: 1.45rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; border: 1px solid rgba(255, 255, 255, 0.2); }
-        .cat-SUB3 { color: #ff4d4d; border-color: #ff4d4d; }
-        .cat-SUB5 { color: #ff944d; border-color: #ff944d; }
-        .cat-LTN  { color: #ffd11a; border-color: #ffd11a; }
-        .cat-MTN  { color: #a6ff1a; border-color: #a6ff1a; }
-        .cat-HTN  { color: #2eb82e; border-color: #2eb82e; }
-        .cat-CHAD { color: #00ccff; border-color: #00ccff; }
-        .cat-TRUE_ADAM { color: #ffd700; border-color: #ffd700; background: rgba(255,215,0,0.25); }
+        /* Круговой Рейтинг */
+        .gauge-box {
+            position: relative;
+            width: 190px;
+            height: 190px;
+        }
+        .gauge-box svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .gauge-bg-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 12;
+        }
+        .gauge-fill-bar {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: square;
+            stroke-dasharray: 565.48;
+            stroke-dashoffset: 565.48;
+            transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .score-num {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1;
+            color: #ffffff;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+        }
+        .score-lbl {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
 
-        .ai-breakdown { width: 100%; display: flex; flex-direction: column; gap: 12px; }
-        .ai-card { background: var(--glass-inner); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 16px 18px; text-align: left; }
-        .ai-card-title { font-size: 0.9rem; font-weight: 800; margin-bottom: 6px; }
-        .title-pros { color: #4ade80; }
-        .title-cons { color: #f87171; }
-        .title-recs { color: #38bdf8; }
-        .ai-card-text { font-size: 0.84rem; color: rgba(255, 255, 255, 0.8); line-height: 1.48; }
+        /* Бейдж Категории */
+        .category-badge {
+            padding: 10px 32px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 900;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+            clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+        }
 
-        .btn-restart { width: 100%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: #ffffff; padding: 15px; border-radius: 18px; font-weight: 800; cursor: pointer; }
+        /* Карточки Метрик и Отчета */
+        .metrics-card {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .metric-row { display: flex; flex-direction: column; gap: 6px; }
+        .metric-info { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+        .metric-name { color: rgba(255, 255, 255, 0.6); }
+        .metric-value { color: #ffffff; }
+        .track-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .fill-bar {
+            height: 100%;
+            width: 0%;
+            background: #ffffff;
+            box-shadow: 0 0 10px #ffffff;
+            transition: width 1.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .report-box {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .report-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: left;
+        }
+        .report-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        .title-pros { color: #ffffff; }
+        .title-cons { color: #ff5555; }
+        .title-recs { color: var(--animus-cyan); }
+        .report-text {
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.75);
+            line-height: 1.45;
+        }
+
+        .btn-reload {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            padding: 14px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-reload:hover { background: #ffffff; color: #000000; }
     </style>
 </head>
 <body>
-    <canvas id="bg-canvas"></canvas>
+    <div class="scanline-overlay"></div>
+
+    <!-- Animus Matrix Canvas Background -->
+    <canvas id="animus-canvas"></canvas>
     <canvas id="confetti-canvas"></canvas>
 
-    <div class="app-card">
+    <div class="animus-card">
+        <div class="animus-corner top-left"></div>
+        <div class="animus-corner bottom-right"></div>
+
         <div class="header">
-            <div class="badge">⚡ Neural Face Engine 3.0</div>
-            <h1>Aesthetic Vision AI</h1>
-            <p>Глубокий векторный анализ геометрии и пропорций лица</p>
+            <div class="badge">⚔️ ABSTERGO ANIMUS 3.0</div>
+            <h1>SYSTEM MATRIX</h1>
+            <p>Синхронизация генетической памяти лица</p>
         </div>
 
         {% if not data %}
-        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5rem; margin-bottom: 12px;">📸</div>
-            <div style="font-size: 1.15rem; font-weight: 800;">Загрузить фотографию</div>
-            <div style="font-size: 0.82rem; color: rgba(255,255,255,0.5); margin-top: 4px;">Выберите качественный портрет или селфи</div>
-            <div class="btn-select-file">Выбрать снимок</div>
+        <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">💠</div>
+            <div class="upload-title">Загрузить объект</div>
+            <div class="upload-subtitle">Выберите портретный файл для инициализации матрицы</div>
+            <div class="btn-animus">Инициация</div>
             <input type="file" id="fileInput" accept="image/*" onchange="uploadPhoto(this)">
         </div>
 
-        <div class="loading-box" id="loadingBox">
-            <div class="spinner-ring"></div>
-            <div style="font-size: 0.95rem; font-weight: 700;">ИИ сканирует геометрию и векторы лица...</div>
+        <div class="loader-screen" id="loaderScreen">
+            <div class="laser-loader">
+                <div class="laser-line"></div>
+            </div>
+            <div class="loader-text">Синхронизация с последовательностью ДНК...</div>
         </div>
         {% endif %}
 
-        <div class="result-view" id="resultView" style="{% if data %}display:flex;{% endif %}">
-            <div class="photo-frame">
-                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Face Scan">
+        <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
+            <div class="photo-container">
+                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Animus Scan">
             </div>
 
-            <div class="gauge-container">
+            <div class="gauge-box">
                 <svg viewBox="0 0 200 200">
-                    <circle class="gauge-track" cx="100" cy="100" r="90"></circle>
-                    <circle class="gauge-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
+                    <circle class="gauge-bg-track" cx="100" cy="100" r="90"></circle>
+                    <circle class="gauge-fill-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
                 </svg>
-                <div class="gauge-inner-text">
-                    <div class="score-val" id="scoreVal">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
-                    <div class="score-sub">из 10.0</div>
+                <div class="gauge-center">
+                    <div class="score-num" id="scoreNum">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
+                    <div class="score-lbl">Индекс DNA</div>
                 </div>
             </div>
 
-            <div class="category-pill {% if data %}{{ data.cat_class }}{% endif %}">
+            <div class="category-badge {% if data %}{{ data.cat_class }}{% endif %}">
                 {% if data %}{{ data.category }}{% endif %}
             </div>
 
             {% if data %}
-            <div class="ai-breakdown">
-                <div class="ai-card">
-                    <div class="ai-card-title title-pros">🔥 Достоинства</div>
-                    <div class="ai-card-text">{{ data.report.pros }}</div>
+            <div class="metrics-card">
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Симметрия овала</span>
+                        <span class="metric-value">{{ data.details.symmetry }}%</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="symBar"></div>
+                    </div>
                 </div>
-                <div class="ai-card">
-                    <div class="ai-card-title title-cons">❌ Недостатки</div>
-                    <div class="ai-card-text">{{ data.report.cons }}</div>
+
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Четкость геометрии</span>
+                        <span class="metric-value">{{ data.details.sharpness }}/10.0</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="sharpBar"></div>
+                    </div>
                 </div>
-                <div class="ai-card">
-                    <div class="ai-card-title title-recs">💡 Рекомендации по Луксмаксингу</div>
-                    <div class="ai-card-text">{{ data.report.recs }}</div>
+
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Спектральный тон</span>
+                        <span class="metric-value">{{ data.details.harmony }}/10.0</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="harmBar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-box">
+                <div class="report-card">
+                    <div class="report-title title-pros">🔥 Генетические плюсы</div>
+                    <div class="report-text">{{ data.report.pros }}</div>
+                </div>
+                <div class="report-card">
+                    <div class="report-title title-cons">❌ Дессинхронизация</div>
+                    <div class="report-text">{{ data.report.cons }}</div>
+                </div>
+                <div class="report-card">
+                    <div class="report-title title-recs">💡 Инструкция по прокачке</div>
+                    <div class="report-text">{{ data.report.recs }}</div>
                 </div>
             </div>
             {% endif %}
 
-            <button class="btn-restart" onclick="location.href='/'">🔄 Проверить другое фото</button>
+            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
         </div>
     </div>
 
     <script>
-        let tgUser = { id: 0, name: 'Веб-гость', username: '' };
+        // Telegram WebApp SDK
+        let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.ready();
             window.Telegram.WebApp.expand();
@@ -512,50 +877,132 @@ HTML_TEMPLATE = """
             }
         }
 
-        const bgCanvas = document.getElementById('bg-canvas');
-        const ctx = bgCanvas.getContext('2d');
-        function resize() { bgCanvas.width = window.innerWidth; bgCanvas.height = window.innerHeight; }
-        window.addEventListener('resize', resize); resize();
+        // ==============================================================================
+        // ⚔️ ASSASSIN'S CREED ANIMUS MATRIX CANVAS (БЕЛЫЕ ПОЛОСЫ, СЕТКИ, ТУМАН)
+        // ==============================================================================
+        const canvas = document.getElementById('animus-canvas');
+        const ctx = canvas.getContext('2d');
 
-        let rotY = 0;
-        const headNodes = [
-            {x: 0, y: 1.3, z: 0}, {x: -0.65, y: 0.95, z: 0.2}, {x: 0.65, y: 0.95, z: 0.2},
-            {x: -0.85, y: 0.45, z: 0}, {x: 0.85, y: 0.45, z: 0}, {x: -0.75, y: -0.25, z: 0.25}, {x: 0.75, y: -0.25, z: 0.25},
-            {x: -0.55, y: -0.85, z: 0.45}, {x: 0.55, y: -0.85, z: 0.45}, {x: 0, y: -1.2, z: 0.55}
-        ];
-        const headEdges = [[0,1],[0,2],[1,3],[2,4],[3,5],[4,6],[5,7],[6,8],[7,9],[8,9]];
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        function drawWireframe(centerX, centerY, scale) {
-            rotY += 0.012;
-            const cos = Math.cos(rotY), sin = Math.sin(rotY);
-            const proj = headNodes.map(node => {
-                let x = node.x * cos - node.z * sin, z = node.x * sin + node.z * cos + 2.6;
-                return { x: centerX + (x / z) * scale, y: centerY - (node.y / z) * scale };
-            });
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1.2;
-            headEdges.forEach(e => {
-                ctx.beginPath(); ctx.moveTo(proj[e[0]].x, proj[e[0]].y);
-                ctx.lineTo(proj[e[1]].x, proj[e[1]].y); ctx.stroke();
+        // 1. Полосы Матрицы
+        let animusLines = [];
+        for (let i = 0; i < 35; i++) {
+            animusLines.push({
+                x: Math.random() * canvas.width,
+                length: Math.random() * 200 + 80,
+                speed: Math.random() * 4 + 1.5,
+                width: Math.random() * 2 + 0.5,
+                opacity: Math.random() * 0.4 + 0.1
             });
         }
 
-        function anim() {
-            ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-            if (bgCanvas.width > 720) {
-                drawWireframe(120, bgCanvas.height / 2, 220);
-                drawWireframe(bgCanvas.width - 120, bgCanvas.height / 2, 220);
-            } else {
-                drawWireframe(bgCanvas.width / 2, 110, 130);
+        // 2. Фрагменты Воспоминаний (Частицы ДНК)
+        let memoryParticles = [];
+        for (let i = 0; i < 60; i++) {
+            memoryParticles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 3 + 1,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: -Math.random() * 1.5 - 0.5,
+                alpha: Math.random() * 0.6 + 0.2
+            });
+        }
+
+        let gridOffset = 0;
+
+        function renderAnimusMatrix() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 3D Фоновые Белые Сетки
+            gridOffset += 0.4;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
             }
-            requestAnimationFrame(anim);
+            for (let y = (gridOffset % gridSize); y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Рендер Белых Лазерных Полос (Коридор Анимуса)
+            animusLines.forEach(l => {
+                l.x += l.speed;
+                if (l.x > canvas.width + l.length) l.x = -l.length;
+
+                ctx.strokeStyle = `rgba(255, 255, 255, ${l.opacity})`;
+                ctx.lineWidth = l.width;
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.moveTo(l.x - l.length, canvas.height / 2 + (l.width * 50));
+                ctx.lineTo(l.x, canvas.height / 2 + (l.width * 50));
+                ctx.stroke();
+            });
+
+            // Рендер Частиц Воспоминаний
+            memoryParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.shadowBlur = 0;
+            requestAnimationFrame(renderAnimusMatrix);
         }
-        anim();
+        renderAnimusMatrix();
+
+        // Web Audio API — Звуковые Импульсы Анимуса
+        function playAnimusSound() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const actx = new AudioCtx();
+                const osc = actx.createOscillator();
+                const gain = actx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(120, actx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, actx.currentTime + 0.4);
+
+                gain.gain.setValueAtTime(0.15, actx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(actx.destination);
+                osc.start();
+                osc.stop(actx.currentTime + 0.4);
+            } catch (e) {}
+        }
 
         async function uploadPhoto(input) {
             if (!input.files || !input.files[0]) return;
-            document.querySelector('.upload-area').style.display = 'none';
-            document.getElementById('loadingBox').style.display = 'block';
+            playAnimusSound();
+            document.getElementById('uploadBox').style.display = 'none';
+            document.getElementById('loaderScreen').style.display = 'block';
 
             const formData = new FormData();
             formData.append('file', input.files[0]);
@@ -567,15 +1014,38 @@ HTML_TEMPLATE = """
                 const response = await fetch('/analyze', { method: 'POST', body: formData });
                 const data = await response.json();
                 if (data.id) window.location.href = '/result/' + data.id;
-            } catch (err) { alert('Ошибка загрузки!'); location.reload(); }
+            } catch (err) {
+                alert('Десинхронизация с сервером');
+                location.reload();
+            }
         }
 
         {% if data %}
         const rating = {{ data.rating }};
         const gaugeBar = document.getElementById('gaugeBar');
+        const scoreNum = document.getElementById('scoreNum');
+
         gaugeBar.style.stroke = "{{ data.color_hex }}";
         const offset = (2 * Math.PI * 90) - (rating / 10.0) * (2 * Math.PI * 90);
-        setTimeout(() => { gaugeBar.style.strokeDashoffset = offset; }, 150);
+
+        setTimeout(() => {
+            gaugeBar.style.strokeDashoffset = offset;
+            document.getElementById('symBar').style.width = "{{ data.details.symmetry }}%";
+            document.getElementById('sharpBar').style.width = "{{ (data.details.sharpness * 10.0) }}%";
+            document.getElementById('harmBar').style.width = "{{ (data.details.harmony * 10.0) }}%";
+        }, 150);
+
+        let cur = 0.0;
+        const step = rating / 40.0;
+        const t = setInterval(() => {
+            cur += step;
+            if (cur >= rating) {
+                scoreNum.innerText = rating.toFixed(1);
+                clearInterval(t);
+            } else {
+                scoreNum.innerText = cur.toFixed(1);
+            }
+        }, 30);
         {% endif %}
     </script>
 </body>
@@ -583,7 +1053,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ С САЙТА)
+# 🛰 ЭНДПОИНТЫ FLASK СЕРВЕРА
 # ==============================================================================
 @app.route('/')
 def home():
@@ -595,7 +1065,7 @@ def analyze():
     file = request.files['file']
 
     user_id = request.form.get('user_id', '0')
-    user_name = request.form.get('user_name', 'Веб-гость')
+    user_name = request.form.get('user_name', 'Объект Анимуса')
     user_username = request.form.get('user_username', '')
 
     unique_id = f"{uuid.uuid4().hex}_{int(time.time())}"
@@ -604,7 +1074,6 @@ def analyze():
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
-    # Сохраняем в локальную папку all_user_photos
     archive_path = os.path.join(PHOTOS_DIR, f"web_user_{user_id}_{filename}")
     cv2.imwrite(archive_path, cv2.imread(filepath))
 
@@ -616,18 +1085,18 @@ def analyze():
         "image_filename": filename
     }
 
-    # 🚨 ОТПРАВКА ФОТОГРАФИИ АДМИНУ О ЗАГРУЗКЕ С САЙТА 🚨
+    # Отправка фото админу
     if ADMIN_ID and ADMIN_ID != 0:
         def send_admin_photo_async():
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 admin_caption = (
-                    f"🌐 **НОВАЯ ЗАГРУЗКА С САЙТА (WEBAPP)!**\n\n"
+                    f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
                     f"👤 **Имя:** {user_name}\n"
                     f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
                     f"🆔 **ID:** `{user_id}`\n"
-                    f"📊 **Результат:** `{rating}/10` ({category})"
+                    f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
                 )
                 photo_file = FSInputFile(filepath)
                 loop.run_until_complete(global_bot.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown"))
@@ -643,7 +1112,7 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск бота в отдельном фоновом потоке
+# Запуск бота в отдельном потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
