@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (FLASK + OPENCV + AIOGRAM)
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION WITH ADMIN PANEL
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -47,7 +47,10 @@ import aiohttp
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))  # Твой Telegram ID
+
+# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (например: 123456789)
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
+
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
@@ -57,7 +60,6 @@ DB_PATH = "bot_database.db"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PHOTOS_DIR, exist_ok=True)
 
-# Подробный логгер системы
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -98,6 +100,7 @@ class DatabaseManager:
                     rating REAL,
                     category TEXT,
                     photo_path TEXT,
+                    source TEXT DEFAULT 'bot',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -115,12 +118,12 @@ class DatabaseManager:
             """, (user_id, username or "", first_name or "Пользователь"))
             await db.commit()
 
-    async def add_scan(self, scan_id: str, user_id: int, rating: float, category: str, photo_path: str):
+    async def add_scan(self, scan_id: str, user_id: int, rating: float, category: str, photo_path: str, source: str = "bot"):
         async with aiosqlite.connect(self.db_file) as db:
             await db.execute("""
-                INSERT INTO scans (id, user_id, rating, category, photo_path)
-                VALUES (?, ?, ?, ?, ?)
-            """, (scan_id, user_id, rating, category, photo_path))
+                INSERT INTO scans (id, user_id, rating, category, photo_path, source)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (scan_id, user_id, rating, category, photo_path, source))
             await db.execute("UPDATE users SET scans_count = scans_count + 1 WHERE user_id = ?", (user_id,))
             await db.commit()
 
@@ -137,6 +140,45 @@ class DatabaseManager:
                 "scans": scans,
                 "avg_rating": round(avg_r, 1) if avg_r else 0.0,
                 "max_rating": round(max_r, 1) if max_r else 0.0
+            }
+
+    async def get_recent_scans_log(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Получение последних логов загрузок для админ-панели."""
+        async with aiosqlite.connect(self.db_file) as db:
+            query = """
+                SELECT s.id, s.user_id, s.rating, s.category, s.source, s.created_at, u.username, u.first_name, s.photo_path
+                FROM scans s
+                LEFT JOIN users u ON s.user_id = u.user_id
+                ORDER BY s.created_at DESC
+                LIMIT ?
+            """
+            async with db.execute(query, (limit,)) as cursor:
+                rows = await cursor.fetchall()
+                logs = []
+                for r in rows:
+                    logs.append({
+                        "scan_id": r[0],
+                        "user_id": r[1],
+                        "rating": r[2],
+                        "category": r[3],
+                        "source": r[4],
+                        "created_at": r[5],
+                        "username": r[6] or "нет",
+                        "first_name": r[7] or "Гость",
+                        "photo_path": r[8]
+                    })
+                return logs
+
+    async def get_global_stats(self) -> Dict[str, Any]:
+        """Общая статистика для админа."""
+        async with aiosqlite.connect(self.db_file) as db:
+            async with db.execute("SELECT COUNT(*) FROM users") as c1:
+                total_users = (await c1.fetchone())[0]
+            async with db.execute("SELECT COUNT(*) FROM scans") as c2:
+                total_scans = (await c2.fetchone())[0]
+            return {
+                "total_users": total_users,
+                "total_scans": total_scans
             }
 
 db = DatabaseManager(DB_PATH)
@@ -208,15 +250,27 @@ def analyze_opencv(image_path: str):
     return rating, cat, cat_cls, color, details, report
 
 # ==============================================================================
-# 🤖 TELEGRAM BOT CORE ENGINE (AIOGRAM 3.X)
+# 🤖 TELEGRAM BOT CORE ENGINE WITH ADMIN PANEL (AIOGRAM 3.X)
 # ==============================================================================
-def get_main_keyboard() -> ReplyKeyboardMarkup:
+def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     kb = [
         [KeyboardButton(text="📸 Проверить лицо"), KeyboardButton(text="📊 Мой профиль")],
         [KeyboardButton(text="🏆 Таблица категорий"), KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
     ]
+    
+    # Кнопка админ-панели показывается только владельцу
+    if ADMIN_ID and user_id == ADMIN_ID:
+        kb.append([KeyboardButton(text="👨‍💻 Админ-панель")])
+        
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="📜 Логи пользователей (Последние 10)", callback_query_data="admin_logs")],
+        [InlineKeyboardButton(text="📊 Общая статистика", callback_query_data="admin_stats")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_result_inline_keyboard(result_id: str) -> InlineKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
@@ -238,14 +292,15 @@ async def cmd_start(message: Message):
         "📸 **Отправь мне фото в чат** или нажми на кнопку **«Открыть WebApp»** ниже! 👇"
     )
     video_path = "logo.mp4"
+    kb = get_main_keyboard(message.from_user.id)
     if os.path.exists(video_path):
         video_file = FSInputFile(video_path)
         try:
-            await message.answer_animation(animation=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            await message.answer_animation(animation=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
         except Exception:
-            await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
     else:
-        await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=kb)
 
 @router.message(F.text == "📸 Проверить лицо")
 async def btn_scan_info(message: Message):
@@ -277,6 +332,73 @@ async def btn_categories(message: Message):
     )
     await message.answer(categories_text, parse_mode="Markdown")
 
+# 👨‍💻 АДМИН-ПАНЕЛЬ В БОТЕ
+@router.message(F.text == "👨‍💻 Админ-панель")
+@router.message(Command("admin"))
+async def btn_admin_panel(message: Message):
+    if not ADMIN_ID or message.from_user.id != ADMIN_ID:
+        await message.answer("❌ У вас нет прав доступа к этой панели.")
+        return
+
+    admin_text = (
+        "👑 **ПАНЕЛЬ ВЛАДЕЛЬЦА СИСТЕМЫ**\n\n"
+        "Здесь вы можете просматривать последние логи проверок пользователей, их ID, юзернеймы и загруженные фотографии."
+    )
+    await message.answer(admin_text, parse_mode="Markdown", reply_markup=get_admin_inline_keyboard())
+
+@router.callback_query(F.data == "admin_stats")
+async def callback_admin_stats(call: CallbackQuery):
+    if not ADMIN_ID or call.from_user.id != ADMIN_ID:
+        await call.answer("Доступ запрещен", show_alert=True)
+        return
+
+    stats = await db.get_global_stats()
+    text = (
+        "📊 **ГЛОБАЛЬНАЯ СТАТИСТИКА ПРОЕКТА:**\n\n"
+        f"👥 **Всего пользователей:** `{stats['total_users']}`\n"
+        f"📸 **Всего сканирований:** `{stats['total_scans']}`"
+    )
+    await call.message.edit_text(text, parse_mode="Markdown", reply_markup=get_admin_inline_keyboard())
+    await call.answer()
+
+@router.callback_query(F.data == "admin_logs")
+async def callback_admin_logs(call: CallbackQuery):
+    if not ADMIN_ID or call.from_user.id != ADMIN_ID:
+        await call.answer("Доступ запрещен", show_alert=True)
+        return
+
+    logs = await db.get_recent_scans_log(limit=8)
+    if not logs:
+        await call.message.edit_text("📜 Логов пока нет.", reply_markup=get_admin_inline_keyboard())
+        await call.answer()
+        return
+
+    await call.message.edit_text("⏳ **Загружаю список последних проверок...**")
+
+    for log in logs:
+        src_icon = "🌐 Сайт/WebApp" if log['source'] == "web" else "🤖 Чат Бота"
+        log_text = (
+            f"👤 **Имя:** {log['first_name']}\n"
+            f"🏷 **Юзер:** @{log['username']}\n"
+            f"🆔 **ID:** `{log['user_id']}`\n"
+            f"📍 **Источник:** {src_icon}\n"
+            f"📊 **Рейтинг:** `{log['rating']}/10` ({log['category']})\n"
+            f"📅 **Время:** `{log['created_at']}`"
+        )
+        
+        # Отправляем инфо с фото, если файл существует
+        if os.path.exists(log['photo_path']):
+            try:
+                photo_file = FSInputFile(log['photo_path'])
+                await call.message.answer_photo(photo=photo_file, caption=log_text, parse_mode="Markdown")
+            except Exception:
+                await call.message.answer(log_text, parse_mode="Markdown")
+        else:
+            await call.message.answer(log_text, parse_mode="Markdown")
+
+    await call.message.answer("📜 **Выше приведена выгрузка последних записей.**", reply_markup=get_admin_inline_keyboard())
+    await call.answer()
+
 async def process_photo_message(message: Message, file_id: str):
     status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото в Анимус...**", parse_mode="Markdown")
     try:
@@ -289,19 +411,6 @@ async def process_photo_message(message: Message, file_id: str):
 
         await message.bot.download_file(file_info.file_path, saved_photo_path)
         logger.info(f"[LOG OWNER] Загружено фото из чата ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
-
-        if ADMIN_ID and ADMIN_ID != 0:
-            try:
-                admin_caption = (
-                    f"🕵️‍♂️ **НОВОЕ ФОТО ИЗ ЧАТА БОТА**\n\n"
-                    f"👤 **Имя:** {message.from_user.full_name}\n"
-                    f"🏷 **Юзернейм:** @{message.from_user.username or 'отсутствует'}\n"
-                    f"🆔 **ID:** `{message.from_user.id}`\n"
-                    f"📁 **Файл:** `{local_filename}`"
-                )
-                await message.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=admin_caption, parse_mode="Markdown")
-            except Exception as adm_err:
-                logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
         rating, category, cat_class, color_hex, details, report = analyze_opencv(saved_photo_path)
         scan_id = f"{uuid.uuid4().hex}_{int(time.time())}"
@@ -321,7 +430,21 @@ async def process_photo_message(message: Message, file_id: str):
         if img_loaded is not None:
             cv2.imwrite(upload_dest, img_loaded)
 
-        await db.add_scan(scan_id, message.from_user.id, rating, category, saved_photo_path)
+        await db.add_scan(scan_id, message.from_user.id, rating, category, saved_photo_path, source="bot")
+
+        # Отправка фото админу
+        if ADMIN_ID and ADMIN_ID != 0 and message.from_user.id != ADMIN_ID:
+            try:
+                admin_caption = (
+                    f"🕵️‍♂️ **НОВОЕ ФОТО ИЗ ЧАТА БОТА**\n\n"
+                    f"👤 **Имя:** {message.from_user.full_name}\n"
+                    f"🏷 **Юзернейм:** @{message.from_user.username or 'отсутствует'}\n"
+                    f"🆔 **ID:** `{message.from_user.id}`\n"
+                    f"📊 **Оценка:** `{rating}/10`"
+                )
+                await message.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=admin_caption, parse_mode="Markdown")
+            except Exception as adm_err:
+                logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
         await status_msg.edit_text(
             f"✅ **Анализ генетического кода завершен!**\n\n"
@@ -1047,7 +1170,8 @@ def analyze():
         return jsonify({"error": "No file"}), 400
     file = request.files['file']
 
-    user_id = request.form.get('user_id', '0')
+    user_id_str = request.form.get('user_id', '0')
+    user_id = int(user_id_str) if user_id_str.isdigit() else 0
     user_name = request.form.get('user_name', 'Объект Анимуса')
     user_username = request.form.get('user_username', '')
 
@@ -1068,11 +1192,20 @@ def analyze():
         "image_filename": filename
     }
 
-    # Логирование для владельца в логах Render
+    # Регистрация и запись скана в БД
+    def save_db_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        if user_id != 0:
+            loop.run_until_complete(db.register_user(user_id, user_username, user_name))
+        loop.run_until_complete(db.add_scan(unique_id, user_id, rating, category, archive_path, source="web"))
+
+    threading.Thread(target=save_db_async, daemon=True).start()
+
     logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
 
     # Отправка фото в ТГ владельцу
-    if ADMIN_ID and ADMIN_ID != 0:
+    if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
         def send_admin_photo_async():
             try:
                 loop = asyncio.new_event_loop()
