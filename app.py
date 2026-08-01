@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (FULLY FIXED & OPERATIONAL)
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (STABLE PRODUCTION SINGLE-FILE)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -48,7 +48,7 @@ import aiohttp
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 
-# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (узнать можно через бот @userinfobot)
+# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (или передай через переменные окружения Render)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
@@ -468,7 +468,7 @@ async def handle_user_document(message: Message):
         await process_photo_message(message, message.document.file_id)
 
 def start_telegram_bot():
-    """Безопасный запуск бота внутри отдельного потока со своим Asyncio Loop."""
+    """Безопасный запуск бота внутри фонового потока с отключенным перехватом сигналов main thread."""
     async def bot_worker():
         await db.init_db()
         bot = Bot(token=BOT_TOKEN)
@@ -476,8 +476,7 @@ def start_telegram_bot():
         dp.include_router(router)
         logger.info("Телеграм-бот успешно инициализирован и слушает команды.")
         try:
-            # drop_pending_updates=True удаляет подвисшие старые запросы при перезапуске
-            await dp.start_polling(bot, drop_pending_updates=True)
+            await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
             logger.error(f"Ошибка в работе polling: {e}")
         finally:
