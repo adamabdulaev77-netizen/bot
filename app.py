@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION WITH ADMIN PANEL
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (FULLY FIXED & OPERATIONAL)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -48,7 +48,7 @@ import aiohttp
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 
-# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (например: 123456789)
+# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (узнать можно через бот @userinfobot)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
@@ -72,8 +72,6 @@ logger = logging.getLogger("AnimusMatrixEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
-
-global_bot = Bot(token=BOT_TOKEN)
 
 # ==============================================================================
 # 🗄 МОДУЛЬ БАЗЫ ДАННЫХ (AIOSQLITE ENGINE)
@@ -143,7 +141,6 @@ class DatabaseManager:
             }
 
     async def get_recent_scans_log(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Получение последних логов загрузок для админ-панели."""
         async with aiosqlite.connect(self.db_file) as db:
             query = """
                 SELECT s.id, s.user_id, s.rating, s.category, s.source, s.created_at, u.username, u.first_name, s.photo_path
@@ -170,7 +167,6 @@ class DatabaseManager:
                 return logs
 
     async def get_global_stats(self) -> Dict[str, Any]:
-        """Общая статистика для админа."""
         async with aiosqlite.connect(self.db_file) as db:
             async with db.execute("SELECT COUNT(*) FROM users") as c1:
                 total_users = (await c1.fetchone())[0]
@@ -250,7 +246,7 @@ def analyze_opencv(image_path: str):
     return rating, cat, cat_cls, color, details, report
 
 # ==============================================================================
-# 🤖 TELEGRAM BOT CORE ENGINE WITH ADMIN PANEL (AIOGRAM 3.X)
+# 🤖 TELEGRAM BOT ROUTER & HANDLERS (AIOGRAM 3.X)
 # ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
@@ -258,8 +254,6 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         [KeyboardButton(text="📸 Проверить лицо"), KeyboardButton(text="📊 Мой профиль")],
         [KeyboardButton(text="🏆 Таблица категорий"), KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
     ]
-    
-    # Кнопка админ-панели показывается только владельцу
     if ADMIN_ID and user_id == ADMIN_ID:
         kb.append([KeyboardButton(text="👨‍💻 Админ-панель")])
         
@@ -267,8 +261,8 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 
 def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text="📜 Логи пользователей (Последние 10)", callback_query_data="admin_logs")],
-        [InlineKeyboardButton(text="📊 Общая статистика", callback_query_data="admin_stats")]
+        [InlineKeyboardButton(text="📜 Логи пользователей (Последние 10)", callback_data="admin_logs")],
+        [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -293,13 +287,22 @@ async def cmd_start(message: Message):
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
+    
+    sent = False
     if os.path.exists(video_path):
-        video_file = FSInputFile(video_path)
         try:
+            video_file = FSInputFile(video_path)
             await message.answer_animation(animation=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
+            sent = True
         except Exception:
-            await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
-    else:
+            try:
+                video_file = FSInputFile(video_path)
+                await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
+                sent = True
+            except Exception:
+                sent = False
+
+    if not sent:
         await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=kb)
 
 @router.message(F.text == "📸 Проверить лицо")
@@ -332,7 +335,6 @@ async def btn_categories(message: Message):
     )
     await message.answer(categories_text, parse_mode="Markdown")
 
-# 👨‍💻 АДМИН-ПАНЕЛЬ В БОТЕ
 @router.message(F.text == "👨‍💻 Админ-панель")
 @router.message(Command("admin"))
 async def btn_admin_panel(message: Message):
@@ -386,7 +388,6 @@ async def callback_admin_logs(call: CallbackQuery):
             f"📅 **Время:** `{log['created_at']}`"
         )
         
-        # Отправляем инфо с фото, если файл существует
         if os.path.exists(log['photo_path']):
             try:
                 photo_file = FSInputFile(log['photo_path'])
@@ -432,7 +433,6 @@ async def process_photo_message(message: Message, file_id: str):
 
         await db.add_scan(scan_id, message.from_user.id, rating, category, saved_photo_path, source="bot")
 
-        # Отправка фото админу
         if ADMIN_ID and ADMIN_ID != 0 and message.from_user.id != ADMIN_ID:
             try:
                 admin_caption = (
@@ -468,15 +468,20 @@ async def handle_user_document(message: Message):
         await process_photo_message(message, message.document.file_id)
 
 def start_telegram_bot():
+    """Безопасный запуск бота внутри отдельного потока со своим Asyncio Loop."""
     async def bot_worker():
         await db.init_db()
+        bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
-        logger.info("Телеграм-бот успешно запущен в фоновом потоке.")
+        logger.info("Телеграм-бот успешно инициализирован и слушает команды.")
         try:
-            await dp.start_polling(global_bot)
+            # drop_pending_updates=True удаляет подвисшие старые запросы при перезапуске
+            await dp.start_polling(bot, drop_pending_updates=True)
+        except Exception as e:
+            logger.error(f"Ошибка в работе polling: {e}")
         finally:
-            await global_bot.session.close()
+            await bot.session.close()
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -1158,7 +1163,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ И ЛОГИ ВЛАДЕЛЬЦУ)
+# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ)
 # ==============================================================================
 @app.route('/')
 def home():
@@ -1192,7 +1197,6 @@ def analyze():
         "image_filename": filename
     }
 
-    # Регистрация и запись скана в БД
     def save_db_async():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -1204,21 +1208,24 @@ def analyze():
 
     logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
 
-    # Отправка фото в ТГ владельцу
     if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
         def send_admin_photo_async():
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                admin_caption = (
-                    f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
-                    f"👤 **Имя:** {user_name}\n"
-                    f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
-                    f"🆔 **ID:** `{user_id}`\n"
-                    f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
-                )
-                photo_file = FSInputFile(filepath)
-                loop.run_until_complete(global_bot.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown"))
+                async def _send():
+                    bot_admin = Bot(token=BOT_TOKEN)
+                    admin_caption = (
+                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
+                        f"👤 **Имя:** {user_name}\n"
+                        f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
+                        f"🆔 **ID:** `{user_id}`\n"
+                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
+                    )
+                    photo_file = FSInputFile(filepath)
+                    await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
+                    await bot_admin.session.close()
+                loop.run_until_complete(_send())
             except Exception as e:
                 logger.error(f"Ошибка отправки фото админу с сайта: {e}")
 
