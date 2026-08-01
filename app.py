@@ -57,6 +57,7 @@ DB_PATH = "bot_database.db"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PHOTOS_DIR, exist_ok=True)
 
+# Подробный логгер системы
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -101,6 +102,7 @@ class DatabaseManager:
                 )
             """)
             await db.commit()
+            logger.info("База данных SQLite инициализирована успешно.")
 
     async def register_user(self, user_id: int, username: str, first_name: str):
         async with aiosqlite.connect(self.db_file) as db:
@@ -286,6 +288,7 @@ async def process_photo_message(message: Message, file_id: str):
         saved_photo_path = os.path.join(PHOTOS_DIR, local_filename)
 
         await message.bot.download_file(file_info.file_path, saved_photo_path)
+        logger.info(f"[LOG OWNER] Загружено фото из чата ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
 
         if ADMIN_ID and ADMIN_ID != 0:
             try:
@@ -357,7 +360,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE (1000+ LINES OF CODE)
+# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -400,7 +403,6 @@ HTML_TEMPLATE = """
             padding: 20px 12px;
         }
 
-        /* Canvas Матрицы Анимуса */
         #animus-canvas, #confetti-canvas {
             position: fixed;
             top: 0;
@@ -412,7 +414,6 @@ HTML_TEMPLATE = """
         #animus-canvas { z-index: 0; }
         #confetti-canvas { z-index: 100; }
 
-        /* Эффект Scanlines (ЭЛТ-монитор Анимуса) */
         .scanline-overlay {
             position: fixed;
             top: 0;
@@ -426,7 +427,6 @@ HTML_TEMPLATE = """
             z-index: 2;
         }
 
-        /* Главная карточка Animus */
         .animus-card {
             position: relative;
             z-index: 10;
@@ -449,7 +449,6 @@ HTML_TEMPLATE = """
             to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        /* Декоративные уголки Абстерго */
         .animus-corner {
             position: absolute;
             width: 16px;
@@ -499,7 +498,6 @@ HTML_TEMPLATE = """
             text-transform: uppercase;
         }
 
-        /* Загрузочный прямоугольник Анимуса */
         .upload-box {
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 12px;
@@ -557,7 +555,6 @@ HTML_TEMPLATE = """
         }
         #fileInput { display: none; }
 
-        /* Лоадер Скан-Лазер */
         .loader-screen {
             display: none;
             text-align: center;
@@ -592,7 +589,6 @@ HTML_TEMPLATE = """
             text-transform: uppercase;
         }
 
-        /* Экран Результатов */
         .result-screen {
             display: none;
             flex-direction: column;
@@ -619,7 +615,6 @@ HTML_TEMPLATE = """
             object-fit: contain;
         }
 
-        /* Круговой Рейтинг */
         .gauge-box {
             position: relative;
             width: 190px;
@@ -666,7 +661,6 @@ HTML_TEMPLATE = """
             text-transform: uppercase;
         }
 
-        /* Бейдж Категории */
         .category-badge {
             padding: 10px 32px;
             font-family: 'Orbitron', sans-serif;
@@ -680,7 +674,6 @@ HTML_TEMPLATE = """
             clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
         }
 
-        /* Карточки Метрик и Отчета */
         .metrics-card {
             width: 100%;
             background: rgba(255, 255, 255, 0.02);
@@ -759,7 +752,6 @@ HTML_TEMPLATE = """
 <body>
     <div class="scanline-overlay"></div>
 
-    <!-- Animus Matrix Canvas Background -->
     <canvas id="animus-canvas"></canvas>
     <canvas id="confetti-canvas"></canvas>
 
@@ -864,7 +856,6 @@ HTML_TEMPLATE = """
     </div>
 
     <script>
-        // Telegram WebApp SDK
         let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.ready();
@@ -877,9 +868,6 @@ HTML_TEMPLATE = """
             }
         }
 
-        // ==============================================================================
-        // ⚔️ ASSASSIN'S CREED ANIMUS MATRIX CANVAS (БЕЛЫЕ ПОЛОСЫ, СЕТКИ, ТУМАН)
-        // ==============================================================================
         const canvas = document.getElementById('animus-canvas');
         const ctx = canvas.getContext('2d');
 
@@ -890,7 +878,6 @@ HTML_TEMPLATE = """
         window.addEventListener('resize', resize);
         resize();
 
-        // 1. Полосы Матрицы
         let animusLines = [];
         for (let i = 0; i < 35; i++) {
             animusLines.push({
@@ -902,7 +889,6 @@ HTML_TEMPLATE = """
             });
         }
 
-        // 2. Фрагменты Воспоминаний (Частицы ДНК)
         let memoryParticles = [];
         for (let i = 0; i < 60; i++) {
             memoryParticles.push({
@@ -920,7 +906,6 @@ HTML_TEMPLATE = """
         function renderAnimusMatrix() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 3D Фоновые Белые Сетки
             gridOffset += 0.4;
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
             ctx.lineWidth = 1;
@@ -939,7 +924,6 @@ HTML_TEMPLATE = """
                 ctx.stroke();
             }
 
-            // Рендер Белых Лазерных Полос (Коридор Анимуса)
             animusLines.forEach(l => {
                 l.x += l.speed;
                 if (l.x > canvas.width + l.length) l.x = -l.length;
@@ -954,7 +938,6 @@ HTML_TEMPLATE = """
                 ctx.stroke();
             });
 
-            // Рендер Частиц Воспоминаний
             memoryParticles.forEach(p => {
                 p.x += p.vx;
                 p.y += p.vy;
@@ -975,7 +958,6 @@ HTML_TEMPLATE = """
         }
         renderAnimusMatrix();
 
-        // Web Audio API — Звуковые Импульсы Анимуса
         function playAnimusSound() {
             try {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -1053,7 +1035,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# 🛰 ЭНДПОИНТЫ FLASK СЕРВЕРА
+# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ И ЛОГИ ВЛАДЕЛЬЦУ)
 # ==============================================================================
 @app.route('/')
 def home():
@@ -1061,7 +1043,8 @@ def home():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    if 'file' not in request.files: return jsonify({"error": "No file"}), 400
+    if 'file' not in request.files:
+        return jsonify({"error": "No file"}), 400
     file = request.files['file']
 
     user_id = request.form.get('user_id', '0')
@@ -1085,7 +1068,10 @@ def analyze():
         "image_filename": filename
     }
 
-    # Отправка фото админу
+    # Логирование для владельца в логах Render
+    logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
+
+    # Отправка фото в ТГ владельцу
     if ADMIN_ID and ADMIN_ID != 0:
         def send_admin_photo_async():
             try:
@@ -1112,7 +1098,7 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск бота в отдельном потоке
+# Запуск бота в фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
