@@ -48,7 +48,7 @@ import aiohttp
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 
-# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (или передай через переменные окружения Render)
+# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (например: 123456789)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
@@ -287,23 +287,21 @@ async def cmd_start(message: Message):
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
-    
-    sent = False
+
     if os.path.exists(video_path):
         try:
             video_file = FSInputFile(video_path)
-            await message.answer_animation(animation=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
-            sent = True
-        except Exception:
-            try:
-                video_file = FSInputFile(video_path)
-                await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
-                sent = True
-            except Exception:
-                sent = False
+            await message.answer_video(
+                video=video_file,
+                caption=welcome_text,
+                parse_mode="Markdown",
+                reply_markup=kb
+            )
+            return
+        except Exception as e:
+            logger.error(f"Ошибка при отправке logo.mp4: {e}")
 
-    if not sent:
-        await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=kb)
+    await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=kb)
 
 @router.message(F.text == "📸 Проверить лицо")
 async def btn_scan_info(message: Message):
