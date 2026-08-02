@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — GROQ (LLAMA 3) EDITION
+# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — GROQ (LLAMA 3.3) PRODUCTION EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -234,7 +234,7 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 БЕСПЛАТНЫЙ GROQ AI ДВИЖОК (LLAMA 3.1)
+# 🧠 БЕСПЛАТНЫЙ GROQ AI ДВИЖОК (АКТУАЛЬНЫЕ МОДЕЛИ)
 # ==============================================================================
 def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
     headers = {
@@ -247,23 +247,26 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    data = {
-        "model": "llama-3.1-70b-versatile",
-        "messages": messages,
-        "temperature": 0.7
-    }
+    # Актуальные поддерживаемые модели Groq
+    models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768"]
 
-    try:
-        r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=10)
-        if r.status_code == 200:
-            res_json = r.json()
-            return res_json["choices"][0]["message"]["content"].strip()
-        else:
-            logger.error(f"Groq API Error [{r.status_code}]: {r.text[:200]}")
-            return f"⚠️ Ошибка Groq API ({r.status_code})."
-    except Exception as e:
-        logger.error(f"Ошибка вызова Groq AI: {e}")
-        return "⚠️ Произошла ошибка связи с нейросетью."
+    for model_name in models:
+        data = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": 0.7
+        }
+        try:
+            r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=10)
+            if r.status_code == 200:
+                res_json = r.json()
+                return res_json["choices"][0]["message"]["content"].strip()
+            else:
+                logger.warning(f"Groq model {model_name} status [{r.status_code}]: {r.text[:150]}")
+        except Exception as e:
+            logger.error(f"Ошибка вызова Groq model {model_name}: {e}")
+
+    return "⚠️ Произошла ошибка связи с нейросетью."
 
 def analyze_with_groq(sym_pct: float, sharp_score: float, harm_score: float):
     system_prompt = (
