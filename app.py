@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — GROQ (LLAMA 3.3) PRODUCTION EDITION
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (GROQ LLAMA 3.3)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -44,13 +44,12 @@ from aiogram.types import (
     FSInputFile
 )
 from aiogram.fsm.storage.memory import MemoryStorage
+import aiohttp
 
 # ==============================================================================
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
-
-# ⚠️ Твой Telegram ID
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
 # Ключ Groq API
@@ -74,7 +73,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("BloodGroqEnterprise")
+logger = logging.getLogger("AnimusMatrixEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -234,7 +233,7 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 БЕСПЛАТНЫЙ GROQ AI ДВИЖОК (АКТУАЛЬНЫЕ МОДЕЛИ)
+# 🧠 GROQ AI ДВИЖОК (ОБЩЕНИЕ И ОЦЕНКА)
 # ==============================================================================
 def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
     headers = {
@@ -247,7 +246,6 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    # Актуальные поддерживаемые модели Groq
     models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768"]
 
     for model_name in models:
@@ -268,40 +266,30 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
 
     return "⚠️ Произошла ошибка связи с нейросетью."
 
-def analyze_with_groq(sym_pct: float, sharp_score: float, harm_score: float):
-    system_prompt = (
-        "Ты — строгий ИИ-эксперт по анализу внешней привлекательности и луксмаксингу на сервисе Blood. "
-        "Оценивай внешность человека по шкале от 1.0 до 10.0. "
-        "Верни ответ СТРОГО в формате JSON без markdown разметки:\n"
-        '{"rating": 6.4, "category": "MTN", "pros": "Плюсы...", "cons": "Минусы...", "recs": "Советы..."}'
-    )
+def generate_looksmaxing_report(rating: float, sym_pct: float, sharp_val: float, harm_val: float) -> Dict[str, str]:
+    if rating >= 8.5:
+        pros = f"Синхронизация с идеальной моделью Анимуса ({sym_pct}%). Идеально очерченная челюстная дуга, высокий индекс четкости контуров ({sharp_val}/10.0)."
+        cons = "Минорные недочеты в распределении цифрового освещения кадра."
+        recs = "Поддерживай процент жира в организме в пределах 10-12%. Соблюдай питьевой режим и сохраняй осанку (мьюинг)."
+    elif rating >= 7.0:
+        pros = f"Высокий гармонический потенциал структуры лица. Симметрия овала составляет {sym_pct}%."
+        cons = f"Легкий асимметричный сдвиг в области подбородка. Индекс резкости: {sharp_val}/10.0."
+        recs = "Сфокусируйся на снижении процента подкожного жира для максимального выделения скуловых костей."
+    elif rating >= 5.5:
+        pros = f"Удовлетворительный овал лица с коэффициентом цветовой гармонии {harm_val}/10.0. Симметрия: {sym_pct}%."
+        cons = f"Сглаженная линия челюсти, сниженная резкость деталей ({sharp_val}/10.0)."
+        recs = "Оптимизируй рацион для борьбы с отекшим овалом лица, делай массаж Гуаша, исправь осанку."
+    else:
+        pros = f"Базовый баланс цветовой гаммы кадра ({harm_val}/10.0)."
+        cons = f"Заметная асимметрия овала ({sym_pct}%). Низкий индекс контурной резкости ({sharp_val}/10.0)."
+        recs = "Начни комплексную трансформацию: дефаттинг (снижение жира), силовые тренировки, исправление осанки."
 
-    prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
-
-    response_text = ask_groq_ai(prompt, system_prompt)
-    try:
-        if response_text.startswith("```json"): response_text = response_text[7:]
-        if response_text.endswith("```"): response_text = response_text[:-3]
-        ai_json = json.loads(response_text.strip())
-        return (
-            float(ai_json.get("rating", 5.5)),
-            str(ai_json.get("category", "LTN")),
-            str(ai_json.get("pros", "Базовая симметрия овала.")),
-            str(ai_json.get("cons", "Сглаженная линия челюсти.")),
-            str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
-        )
-    except Exception:
-        pass
-
-    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
-    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
-    cat = "MTN" if rating >= 6.0 else "LTN"
-    return rating, cat, f"Симметрия лица {sym_pct}%.", "Недостаточная выраженность скул.", "Держи осанку и занимайся спортом."
+    return {"pros": pros, "cons": cons, "recs": recs}
 
 def analyze_opencv(image_path: str):
     img = cv2.imread(image_path)
     if img is None:
-        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, {"pros": "-", "cons": "-", "recs": "-"}
+        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, generate_looksmaxing_report(5.0, 50.0, 5.0, 5.0)
 
     h, w = img.shape[:2]
     max_dim = 800
@@ -325,18 +313,24 @@ def analyze_opencv(image_path: str):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     harm_score = round(min(10.0, max(1.0, (np.mean(hsv[:, :, 1]) / 25.5) * 0.5 + (np.mean(hsv[:, :, 2]) / 25.5) * 0.5)), 1)
 
-    rating, cat, pros, cons, recs = analyze_with_groq(sym_pct, sharp_score, harm_score)
+    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
+    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
 
-    cat_cls = "cat-HTN" if rating >= 7.0 else ("cat-MTN" if rating >= 6.0 else "cat-LTN")
-    color = "#00e5ff" if rating >= 8.0 else "#ffffff"
+    if rating < 3.0: cat, cat_cls, color = "SUB 3", "cat-SUB3", "#ff3333"
+    elif rating < 5.0: cat, cat_cls, color = "SUB 5", "cat-SUB5", "#ff8833"
+    elif rating < 6.0: cat, cat_cls, color = "LTN", "cat-LTN", "#e6e6e6"
+    elif rating < 7.0: cat, cat_cls, color = "MTN", "cat-MTN", "#cccccc"
+    elif rating < 8.0: cat, cat_cls, color = "HTN", "cat-HTN", "#ffffff"
+    elif rating < 10.0: cat, cat_cls, color = "CHAD", "cat-CHAD", "#00e5ff"
+    else: cat, cat_cls, color = "TRUE ADAM", "cat-TRUE_ADAM", "#ffd700"
 
     details = {"symmetry": sym_pct, "sharpness": sharp_score, "harmony": harm_score}
-    report = {"pros": pros, "cons": cons, "recs": recs}
+    report = generate_looksmaxing_report(rating, sym_pct, sharp_score, harm_score)
 
     return rating, cat, cat_cls, color, details, report
 
 # ==============================================================================
-# 🤖 TELEGRAM BOT ROUTER & HANDLERS
+# 🤖 TELEGRAM BOT ROUTER & HANDLERS (AIOGRAM 3.X)
 # ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
@@ -372,8 +366,8 @@ async def cmd_start(message: Message):
     await db.register_user(message.from_user.id, message.from_user.username or "", message.from_user.first_name)
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
-        "🧠 Я — ИИ-агент сервиса **Blood**.\n\n"
-        "📸 **Отправь мне фото в чат** для оценки внешности или **напиши любой вопрос**, чтобы пообщаться со мной! 👇"
+        "🔥 Я — ИИ-агент по векторному анализу привлекательности, пропорций и геометрии лица.\n\n"
+        "📸 **Отправь мне фото в чат** для оценки или **напиши любой вопрос**, чтобы пообщаться со мной! 👇"
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
@@ -381,7 +375,12 @@ async def cmd_start(message: Message):
     if os.path.exists(video_path):
         try:
             video_file = FSInputFile(video_path)
-            await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
+            await message.answer_video(
+                video=video_file,
+                caption=welcome_text,
+                parse_mode="Markdown",
+                reply_markup=kb
+            )
             return
         except Exception as e:
             logger.error(f"Ошибка при отправке logo.mp4: {e}")
@@ -398,8 +397,8 @@ async def btn_profile(message: Message):
     profile_text = (
         f"👤 **Профиль:** {message.from_user.first_name}\n"
         f"🆔 **ID:** `{message.from_user.id}`\n\n"
-        f"📸 **Проверок сделано:** {stats['scans']}\n"
-        f"💬 **Вопросов ИИ-агенту:** {stats['chats']}\n"
+        f"📈 **Проверок сделано:** {stats['scans']}\n"
+        f"💬 **Вопросов ИИ:** {stats['chats']}\n"
         f"⭐ **Средний балл:** `{stats['avg_rating']} / 10`\n"
         f"🔥 **Максимальный балл:** `{stats['max_rating']} / 10`"
     )
@@ -428,7 +427,7 @@ async def btn_admin_panel(message: Message):
 
     admin_text = (
         "👑 **ПАНЕЛЬ ВЛАДЕЛЬЦА СИСТЕМЫ**\n\n"
-        "Выберите нужный раздел для просмотра логов фото или переписок пользователей:"
+        "Выберите раздел для просмотра логов фотографий или истории переписок с ИИ:"
     )
     await message.answer(admin_text, parse_mode="Markdown", reply_markup=get_admin_inline_keyboard())
 
@@ -481,7 +480,7 @@ async def callback_admin_photos(call: CallbackQuery):
         else:
             await call.message.answer(log_text, parse_mode="Markdown")
 
-    await call.message.answer("📸 **Выше приведены последние загруженные снимки.**", reply_markup=get_admin_inline_keyboard())
+    await call.message.answer("📸 **Выше приведена выгрузка последних снимков.**", reply_markup=get_admin_inline_keyboard())
     await call.answer()
 
 @router.callback_query(F.data == "admin_chats")
@@ -512,7 +511,7 @@ async def callback_admin_chats(call: CallbackQuery):
     await call.answer()
 
 async def process_photo_message(message: Message, file_id: str):
-    status_msg = await message.reply("🧠 **Groq AI проводит биометрический анализ...**", parse_mode="Markdown")
+    status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото в Анимус...**", parse_mode="Markdown")
     try:
         file_info = await message.bot.get_file(file_id)
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
@@ -522,14 +521,18 @@ async def process_photo_message(message: Message, file_id: str):
         saved_photo_path = os.path.join(PHOTOS_DIR, local_filename)
 
         await message.bot.download_file(file_info.file_path, saved_photo_path)
-        logger.info(f"[LOG OWNER] Загружено фото из ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
+        logger.info(f"[LOG OWNER] Загружено фото из чата ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
 
         rating, category, cat_class, color_hex, details, report = analyze_opencv(saved_photo_path)
         scan_id = f"{uuid.uuid4().hex}_{int(time.time())}"
 
         results_db[scan_id] = {
-            "rating": rating, "category": category, "cat_class": cat_class,
-            "color_hex": color_hex, "details": details, "report": report,
+            "rating": rating,
+            "category": category,
+            "cat_class": cat_class,
+            "color_hex": color_hex,
+            "details": details,
+            "report": report,
             "image_filename": local_filename
         }
 
@@ -547,23 +550,23 @@ async def process_photo_message(message: Message, file_id: str):
                     f"👤 **Имя:** {message.from_user.full_name}\n"
                     f"🏷 **Юзернейм:** @{message.from_user.username or 'отсутствует'}\n"
                     f"🆔 **ID:** `{message.from_user.id}`\n"
-                    f"📊 **Оценка:** `{rating}/10` ({category})"
+                    f"📊 **Оценка:** `{rating}/10`"
                 )
                 await message.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=admin_caption, parse_mode="Markdown")
             except Exception as adm_err:
                 logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
         await status_msg.edit_text(
-            f"✅ **Анализ геометрии лица завершен!**\n\n"
+            f"✅ **Анализ генетического кода завершен!**\n\n"
             f"📊 **Твой рейтинг:** `{rating} / 10`\n"
             f"🏷 **Категория:** `{category}`\n\n"
-            f"👇 **Нажми на кнопку ниже, чтобы открыть карточку:**",
+            f"👇 **Нажми на кнопку ниже, чтобы открыть интерактивную карточку:**",
             parse_mode="Markdown",
             reply_markup=get_result_inline_keyboard(scan_id)
         )
     except Exception as e:
         logger.error(f"Ошибка при обработке фото: {e}", exc_info=True)
-        await status_msg.edit_text("❌ Произошла ошибка при обработке кадра.")
+        await status_msg.edit_text("❌ Произошла ошибка при векторной обработке.")
 
 @router.message(F.photo)
 async def handle_user_photo(message: Message):
@@ -574,15 +577,16 @@ async def handle_user_document(message: Message):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
         await process_photo_message(message, message.document.file_id)
 
+# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
     if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "👨‍💻 Админ-панель"]:
         return
 
-    status_msg = await message.answer("💬 *ИИ-агент Blood обдумывает ответ...*", parse_mode="Markdown")
+    status_msg = await message.answer("💬 *ИИ-агент обдумывает ответ...*", parse_mode="Markdown")
     
     loop = asyncio.get_event_loop()
-    sys_prompt = "Ты — ИИ-агент сервиса Blood. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, четко и дружелюбно."
+    sys_prompt = "Ты — ИИ-агент сервиса Animus. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, коротко и по делу."
     ai_reply = await loop.run_in_executor(None, ask_groq_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
@@ -604,7 +608,7 @@ def start_telegram_bot():
         
         await bot.delete_webhook(drop_pending_updates=True)
         
-        logger.info("Телеграм-бот с Groq AI запущен.")
+        logger.info("Телеграм-бот успешно инициализирован и слушает команды.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
@@ -617,7 +621,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 FRONTEND ШАБЛОН BLOOD
+# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -625,189 +629,674 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blood — AI Face Evaluation</title>
+    <title>ANIMUS 3.0 — Memory Corridor Synchronization</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-base: #f4f5f8;
-            --text-main: #000000;
-            --accent-red: #ff0033;
-            --card-bg: rgba(255, 255, 255, 0.92);
-            --card-border: #000000;
-            --shadow-hard: 12px 12px 0px #000000;
-            --font-main: 'Space Grotesk', sans-serif;
-            --font-mono: 'Space Mono', monospace;
+            --animus-white: #ffffff;
+            --animus-silver: #e0e6ed;
+            --animus-gray: rgba(255, 255, 255, 0.15);
+            --animus-glow: rgba(255, 255, 255, 0.85);
+            --animus-cyan: #00f0ff;
+            --animus-card: rgba(12, 16, 24, 0.82);
+            --animus-border: rgba(255, 255, 255, 0.25);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-main); user-select: none; }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Rajdhani', sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
         body {
-            background: linear-gradient(-45deg, #ffffff, #f0f2f5, #e6e9f0, #ffffff);
-            background-size: 400% 400%;
-            animation: gradientShift 12s ease infinite;
-            color: var(--text-main);
+            background: #05070a;
+            color: #ffffff;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow-x: hidden;
             position: relative;
-            padding: 20px 14px;
+            padding: 20px 12px;
         }
-        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        #binary-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-        .main-card {
-            position: relative; z-index: 10; width: 100%; max-width: 540px;
-            background: var(--card-bg); backdrop-filter: blur(20px);
-            border: 3px solid var(--card-border); border-radius: 28px;
-            padding: 40px 28px; box-shadow: var(--shadow-hard); text-align: center;
+
+        #animus-canvas, #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
         }
-        .brand-badge {
-            display: inline-block; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;
-            letter-spacing: 2.5px; background: var(--text-main); color: #ffffff;
-            padding: 8px 20px; border-radius: 100px; text-transform: uppercase; margin-bottom: 22px;
+        #animus-canvas { z-index: 0; }
+        #confetti-canvas { z-index: 100; }
+
+        .scanline-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+            z-index: 2;
         }
-        .header-title { font-size: 2.2rem; font-weight: 700; line-height: 1.25; margin-bottom: 14px; }
-        .header-title span { color: var(--accent-red); }
-        .header-subtitle { font-size: 1.05rem; color: rgba(0, 0, 0, 0.7); font-weight: 500; margin-bottom: 34px; }
+
+        .animus-card {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 530px;
+            background: var(--animus-card);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--animus-border);
+            border-radius: 20px;
+            padding: 32px 24px;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.12),
+                        inset 0 0 20px rgba(255, 255, 255, 0.05);
+            animation: animusAppear 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            clip-path: polygon(0 0, 95% 0, 100% 5%, 100% 100%, 5% 100%, 0 95%);
+        }
+
+        @keyframes animusAppear {
+            from { opacity: 0; transform: scale(0.92) translateY(30px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .animus-corner {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            pointer-events: none;
+        }
+        .top-left { top: 8px; left: 8px; border-right: none; border-bottom: none; }
+        .bottom-right { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+            position: relative;
+        }
+        .header .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 16px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2.1rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+        }
+        .header p {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 6px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
         .upload-box {
-            border: 3px dashed var(--text-main); border-radius: 20px; padding: 45px 20px;
-            cursor: pointer; background: rgba(255, 255, 255, 0.5); transition: all 0.25s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 45px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            background: rgba(255, 255, 255, 0.02);
+            position: relative;
+            overflow: hidden;
         }
-        .upload-box:hover { background: rgba(255, 0, 51, 0.04); border-color: var(--accent-red); }
-        .btn-blood {
-            display: inline-block; background: var(--accent-red); color: #ffffff;
-            font-family: var(--font-mono); font-size: 1rem; font-weight: 700;
-            padding: 16px 36px; border-radius: 14px; border: 2px solid #000000;
-            box-shadow: 4px 4px 0px #000000; text-transform: uppercase; cursor: pointer;
+        .upload-box:hover {
+            border-color: #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
+        }
+        .upload-icon {
+            font-size: 2.8rem;
+            margin-bottom: 12px;
+            color: #ffffff;
+            text-shadow: 0 0 15px #ffffff;
+        }
+        .upload-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #ffffff;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+        .upload-subtitle {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+            margin-bottom: 22px;
+        }
+        .btn-animus {
+            display: inline-block;
+            background: #ffffff;
+            color: #000000;
+            padding: 14px 36px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            border: none;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            transition: all 0.3s ease;
+        }
+        .btn-animus:hover {
+            background: var(--animus-cyan);
+            box-shadow: 0 0 30px var(--animus-cyan);
         }
         #fileInput { display: none; }
-        .result-view { display: none; flex-direction: column; align-items: center; gap: 24px; }
-        .photo-preview { width: 100%; height: 320px; border-radius: 18px; border: 3px solid #000000; overflow: hidden; background: #000000; }
-        .photo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .btn-reset {
-            width: 100%; background: #ffffff; color: #000000; font-family: var(--font-mono);
-            font-weight: 700; font-size: 0.95rem; padding: 14px; border-radius: 12px;
-            border: 2px solid #000000; box-shadow: 4px 4px 0px #000000; cursor: pointer;
+
+        .loader-screen {
+            display: none;
+            text-align: center;
+            padding: 40px 10px;
         }
+        .laser-loader {
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .laser-line {
+            position: absolute;
+            top: 0;
+            left: -50%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #ffffff, transparent);
+            animation: laserScan 1.2s infinite ease-in-out;
+        }
+        @keyframes laserScan {
+            0% { left: -50%; }
+            100% { left: 100%; }
+        }
+        .loader-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+
+        .result-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 22px;
+        }
+
+        .photo-container {
+            width: 100%;
+            height: 330px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: #000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+        }
+        .photo-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .gauge-box {
+            position: relative;
+            width: 190px;
+            height: 190px;
+        }
+        .gauge-box svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        .gauge-bg-track {
+            fill: none;
+            stroke: rgba(255, 255, 255, 0.08);
+            stroke-width: 12;
+        }
+        .gauge-fill-bar {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: square;
+            stroke-dasharray: 565.48;
+            stroke-dashoffset: 565.48;
+            transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .gauge-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        .score-num {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1;
+            color: #ffffff;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+        }
+        .score-lbl {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .category-badge {
+            padding: 10px 32px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.35rem;
+            font-weight: 900;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+            clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
+        }
+
+        .metrics-card {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .metric-row { display: flex; flex-direction: column; gap: 6px; }
+        .metric-info { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+        .metric-name { color: rgba(255, 255, 255, 0.6); }
+        .metric-value { color: #ffffff; }
+        .track-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .fill-bar {
+            height: 100%;
+            width: 0%;
+            background: #ffffff;
+            box-shadow: 0 0 10px #ffffff;
+            transition: width 1.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .report-box {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .report-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: left;
+        }
+        .report-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+        .title-pros { color: #ffffff; }
+        .title-cons { color: #ff5555; }
+        .title-recs { color: var(--animus-cyan); }
+        .report-text {
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.75);
+            line-height: 1.45;
+        }
+
+        .btn-reload {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: #ffffff;
+            padding: 14px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 800;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-reload:hover { background: #ffffff; color: #000000; }
     </style>
 </head>
 <body>
-    <canvas id="binary-canvas"></canvas>
+    <div class="scanline-overlay"></div>
 
-    <div class="main-card">
-        <div class="brand-badge">SYSTEM // BLOOD 1.0</div>
-        <h1 class="header-title">Здравствуйте, вы на сайте <span>Blood</span></h1>
-        <p class="header-subtitle">Загрузите фото и получите математический векторный анализ вашей внешности</p>
+    <canvas id="animus-canvas"></canvas>
+    <canvas id="confetti-canvas"></canvas>
+
+    <div class="animus-card">
+        <div class="animus-corner top-left"></div>
+        <div class="animus-corner bottom-right"></div>
+
+        <div class="header">
+            <div class="badge">⚔️ ABSTERGO ANIMUS 3.0</div>
+            <h1>SYSTEM MATRIX</h1>
+            <p>Синхронизация генетической памяти лица</p>
+        </div>
 
         {% if not data %}
-        <div class="upload-box" onclick="document.getElementById('fileInput').click()">
-            <span style="font-size: 3.2rem; display: block; margin-bottom: 14px;">🩸</span>
-            <div style="font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;">Загрузить фотографию</div>
-            <div style="font-size: 0.85rem; font-family: var(--font-mono); color: rgba(0,0,0,0.5); margin-bottom: 24px;">[ PNG, JPG, WEBP ]</div>
-            <div class="btn-blood">Запустить расчет</div>
+        <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
+            <div class="upload-icon">💠</div>
+            <div class="upload-title">Загрузить объект</div>
+            <div class="upload-subtitle">Выберите портретный файл для инициализации матрицы</div>
+            <div class="btn-animus">Инициация</div>
             <input type="file" id="fileInput" accept="image/*" onchange="uploadPhoto(this)">
+        </div>
+
+        <div class="loader-screen" id="loaderScreen">
+            <div class="laser-loader">
+                <div class="laser-line"></div>
+            </div>
+            <div class="loader-text">Синхронизация с последовательностью ДНК...</div>
         </div>
         {% endif %}
 
-        <div class="result-view" id="resultView" style="{% if data %}display:flex;{% endif %}">
-            <div class="photo-preview">
-                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Scan">
+        <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
+            <div class="photo-container">
+                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Animus Scan">
             </div>
-            <div style="font-family: var(--font-mono); font-size: 3rem; font-weight: 700;">
-                {% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %} / 10
+
+            <div class="gauge-box">
+                <svg viewBox="0 0 200 200">
+                    <circle class="gauge-bg-track" cx="100" cy="100" r="90"></circle>
+                    <circle class="gauge-fill-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
+                </svg>
+                <div class="gauge-center">
+                    <div class="score-num" id="scoreNum">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
+                    <div class="score-lbl">Индекс DNA</div>
+                </div>
             </div>
-            <button class="btn-reset" onclick="location.href='/'">🔄 Загрузить новое фото</button>
+
+            <div class="category-badge {% if data %}{{ data.cat_class }}{% endif %}">
+                {% if data %}{{ data.category }}{% endif %}
+            </div>
+
+            {% if data %}
+            <div class="metrics-card">
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Симметрия овала</span>
+                        <span class="metric-value">{{ data.details.symmetry }}%</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="symBar"></div>
+                    </div>
+                </div>
+
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Четкость геометрии</span>
+                        <span class="metric-value">{{ data.details.sharpness }}/10.0</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="sharpBar"></div>
+                    </div>
+                </div>
+
+                <div class="metric-row">
+                    <div class="metric-info">
+                        <span class="metric-name">Спектральный тон</span>
+                        <span class="metric-value">{{ data.details.harmony }}/10.0</span>
+                    </div>
+                    <div class="track-bar">
+                        <div class="fill-bar" id="harmBar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-box">
+                <div class="report-card">
+                    <div class="report-title title-pros">🔥 Генетические плюсы</div>
+                    <div class="report-text">{{ data.report.pros }}</div>
+                </div>
+                <div class="report-card">
+                    <div class="report-title title-cons">❌ Дессинхронизация</div>
+                    <div class="report-text">{{ data.report.cons }}</div>
+                </div>
+                <div class="report-card">
+                    <div class="report-title title-recs">💡 Инструкция по прокачке</div>
+                    <div class="report-text">{{ data.report.recs }}</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
         </div>
     </div>
 
     <script>
-        let tgUser = { id: 0, name: 'Объект', username: '' };
+        let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.expand();
             if (window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
                 const u = window.Telegram.WebApp.initDataUnsafe.user;
-                tgUser.id = u.id || 0; tgUser.name = u.first_name || ''; tgUser.username = u.username || '';
+                tgUser.id = u.id || 0;
+                tgUser.name = (u.first_name || '') + ' ' + (u.last_name || '');
+                tgUser.username = u.username || '';
             }
         }
 
-        const canvas = document.getElementById('binary-canvas');
+        const canvas = document.getElementById('animus-canvas');
         const ctx = canvas.getContext('2d');
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-        window.addEventListener('resize', resize); resize();
 
-        const colWidth = 20, columns = Math.floor(window.innerWidth / colWidth) + 5;
-        const drops = [], digits = ['0', '1'];
-        for (let i = 0; i < columns; i++) drops[i] = Math.floor(Math.random() * -100);
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        const maleFaceNodes = [
-            {x: 0, y: -130, z: 0}, {x: -30, y: -120, z: 10}, {x: 30, y: -120, z: 10},
-            {x: -50, y: -80, z: 20}, {x: 50, y: -80, z: 20}, {x: -60, y: -20, z: 30}, {x: 60, y: -20, z: 30},
-            {x: -50, y: 50, z: 25}, {x: 50, y: 50, z: 25}, {x: -25, y: 85, z: 35}, {x: 25, y: 85, z: 35}, {x: 0, y: 95, z: 40},
-            {x: -38, y: -30, z: 45}, {x: -22, y: -33, z: 48}, {x: -12, y: -30, z: 48}, {x: -22, y: -27, z: 48},
-            {x: 12, y: -30, z: 48}, {x: 22, y: -33, z: 48}, {x: 38, y: -30, z: 45}, {x: 22, y: -27, z: 48}
-        ];
-        const maleFaceEdges = [[0,1],[1,3],[3,5],[5,7],[7,9],[9,11],[11,10],[10,8],[8,6],[6,4],[4,2],[2,0],[12,13],[13,14],[14,15],[15,12],[16,17],[17,18],[18,19],[19,16]];
-
-        const femaleFaceNodes = [
-            {x: 0, y: -110, z: 0}, {x: -30, y: -100, z: 10}, {x: 30, y: -100, z: 10},
-            {x: -45, y: -50, z: 20}, {x: 45, y: -50, z: 20}, {x: -50, y: -10, z: 30}, {x: 50, y: -10, z: 30},
-            {x: -35, y: 45, z: 30}, {x: 35, y: 45, z: 30}, {x: 0, y: 85, z: 35},
-            {x: -34, y: -25, z: 42}, {x: -20, y: -29, z: 45}, {x: -10, y: -25, z: 45}, {x: -20, y: -21, z: 45},
-            {x: 10, y: -25, z: 45}, {x: 20, y: -29, z: 45}, {x: 34, y: -25, z: 42}, {x: 20, y: -21, z: 45},
-            {x: -55, y: -90, z: 5}, {x: -70, y: -30, z: -10}, {x: -75, y: 40, z: -20}, {x: -70, y: 120, z: -30},
-            {x: 55, y: -90, z: 5}, {x: 70, y: -30, z: -10}, {x: 75, y: 40, z: -20}, {x: 70, y: 120, z: -30}
-        ];
-        const femaleFaceEdges = [[0,1],[1,3],[3,5],[5,7],[7,9],[9,8],[8,6],[6,4],[4,2],[2,0],[10,11],[11,12],[12,13],[13,10],[14,15],[15,16],[16,17],[17,14],[1,18],[18,19],[19,20],[20,21],[2,22],[22,23],[23,24],[24,25]];
-
-        let rot = 0;
-        function drawFace(cx, cy, scale, nodes, edges) {
-            const cos = Math.cos(rot), sin = Math.sin(rot);
-            const proj = nodes.map(n => {
-                let x = n.x * cos - n.z * sin, z = n.x * sin + n.z * cos + 2.8;
-                return { x: cx + (x / z) * scale, y: cy - (n.y / z) * scale };
+        let animusLines = [];
+        for (let i = 0; i < 35; i++) {
+            animusLines.push({
+                x: Math.random() * canvas.width,
+                length: Math.random() * 200 + 80,
+                speed: Math.random() * 4 + 1.5,
+                width: Math.random() * 2 + 0.5,
+                opacity: Math.random() * 0.4 + 0.1
             });
-            ctx.strokeStyle = '#ff0033'; ctx.lineWidth = 1.5;
-            edges.forEach(e => { ctx.beginPath(); ctx.moveTo(proj[e[0]].x, proj[e[0]].y); ctx.lineTo(proj[e[1]].x, proj[e[1]].y); ctx.stroke(); });
         }
 
-        function anim() {
-            ctx.fillStyle = 'rgba(244, 245, 248, 0.28)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'; ctx.font = '15px "Space Mono", monospace';
-            for (let i = 0; i < drops.length; i++) {
-                ctx.fillText(digits[Math.floor(Math.random() * digits.length)], i * colWidth, drops[i] * 22);
-                if (drops[i] * 22 > canvas.height && Math.random() > 0.975) drops[i] = 0;
-                drops[i]++;
-            }
-            rot += 0.012;
-            if (canvas.width > 768) {
-                drawFace(140, canvas.height / 2, 2.2, maleFaceNodes, maleFaceEdges);
-                drawFace(canvas.width - 140, canvas.height / 2, 2.2, femaleFaceNodes, femaleFaceEdges);
-            } else {
-                drawFace(canvas.width / 2, 100, 1.3, maleFaceNodes, maleFaceEdges);
-            }
-            requestAnimationFrame(anim);
+        let memoryParticles = [];
+        for (let i = 0; i < 60; i++) {
+            memoryParticles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 3 + 1,
+                vx: (Math.random() - 0.5) * 0.5,
+                vy: -Math.random() * 1.5 - 0.5,
+                alpha: Math.random() * 0.6 + 0.2
+            });
         }
-        anim();
+
+        let gridOffset = 0;
+
+        function renderAnimusMatrix() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            gridOffset += 0.4;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = (gridOffset % gridSize); y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            animusLines.forEach(l => {
+                l.x += l.speed;
+                if (l.x > canvas.width + l.length) l.x = -l.length;
+
+                ctx.strokeStyle = `rgba(255, 255, 255, ${l.opacity})`;
+                ctx.lineWidth = l.width;
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.moveTo(l.x - l.length, canvas.height / 2 + (l.width * 50));
+                ctx.lineTo(l.x, canvas.height / 2 + (l.width * 50));
+                ctx.stroke();
+            });
+
+            memoryParticles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.y < 0) p.y = canvas.height;
+                if (p.x < 0) p.x = canvas.width;
+                if (p.x > canvas.width) p.x = 0;
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+                ctx.shadowColor = '#ffffff';
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.shadowBlur = 0;
+            requestAnimationFrame(renderAnimusMatrix);
+        }
+        renderAnimusMatrix();
+
+        function playAnimusSound() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const actx = new AudioCtx();
+                const osc = actx.createOscillator();
+                const gain = actx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(120, actx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, actx.currentTime + 0.4);
+
+                gain.gain.setValueAtTime(0.15, actx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(actx.destination);
+                osc.start();
+                osc.stop(actx.currentTime + 0.4);
+            } catch (e) {}
+        }
 
         async function uploadPhoto(input) {
             if (!input.files || !input.files[0]) return;
+            playAnimusSound();
+            document.getElementById('uploadBox').style.display = 'none';
+            document.getElementById('loaderScreen').style.display = 'block';
+
             const formData = new FormData();
             formData.append('file', input.files[0]);
             formData.append('user_id', tgUser.id);
             formData.append('user_name', tgUser.name);
             formData.append('user_username', tgUser.username);
-            const response = await fetch('/analyze', { method: 'POST', body: formData });
-            const data = await response.json();
-            if (data.id) window.location.href = '/result/' + data.id;
+
+            try {
+                const response = await fetch('/analyze', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.id) window.location.href = '/result/' + data.id;
+            } catch (err) {
+                alert('Десинхронизация с сервером');
+                location.reload();
+            }
         }
+
+        {% if data %}
+        const rating = {{ data.rating }};
+        const gaugeBar = document.getElementById('gaugeBar');
+        const scoreNum = document.getElementById('scoreNum');
+
+        gaugeBar.style.stroke = "{{ data.color_hex }}";
+        const offset = (2 * Math.PI * 90) - (rating / 10.0) * (2 * Math.PI * 90);
+
+        setTimeout(() => {
+            gaugeBar.style.strokeDashoffset = offset;
+            document.getElementById('symBar').style.width = "{{ data.details.symmetry }}%";
+            document.getElementById('sharpBar').style.width = "{{ (data.details.sharpness * 10.0) }}%";
+            document.getElementById('harmBar').style.width = "{{ (data.details.harmony * 10.0) }}%";
+        }, 150);
+
+        let cur = 0.0;
+        const step = rating / 40.0;
+        const t = setInterval(() => {
+            cur += step;
+            if (cur >= rating) {
+                scoreNum.innerText = rating.toFixed(1);
+                clearInterval(t);
+            } else {
+                scoreNum.innerText = cur.toFixed(1);
+            }
+        }, 30);
+        {% endif %}
     </script>
 </body>
 </html>
 """
 
 # ==============================================================================
-# 🛰 FLASK ROUTES
+# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ)
 # ==============================================================================
 @app.route('/')
 def home():
@@ -815,12 +1304,13 @@ def home():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    if 'file' not in request.files: return jsonify({"error": "No file"}), 400
+    if 'file' not in request.files:
+        return jsonify({"error": "No file"}), 400
     file = request.files['file']
 
     user_id_str = request.form.get('user_id', '0')
     user_id = int(user_id_str) if user_id_str.isdigit() else 0
-    user_name = request.form.get('user_name', 'Объект')
+    user_name = request.form.get('user_name', 'Объект Анимуса')
     user_username = request.form.get('user_username', '')
 
     unique_id = f"{uuid.uuid4().hex}_{int(time.time())}"
@@ -849,6 +1339,8 @@ def analyze():
 
     threading.Thread(target=save_db_async, daemon=True).start()
 
+    logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
+
     if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
         def send_admin_photo_async():
             try:
@@ -857,18 +1349,18 @@ def analyze():
                 async def _send():
                     bot_admin = Bot(token=BOT_TOKEN)
                     admin_caption = (
-                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В BLOOD (САЙТ)!**\n\n"
+                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
                         f"👤 **Имя:** {user_name}\n"
                         f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
                         f"🆔 **ID:** `{user_id}`\n"
-                        f"🧠 **Groq Оценка:** `{rating}/10` ({category})"
+                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
                     )
                     photo_file = FSInputFile(filepath)
                     await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
                     await bot_admin.session.close()
                 loop.run_until_complete(_send())
             except Exception as e:
-                logger.error(f"Ошибка отправки фото админу: {e}")
+                logger.error(f"Ошибка отправки фото админу с сайта: {e}")
 
         threading.Thread(target=send_admin_photo_async, daemon=True).start()
 
@@ -879,6 +1371,7 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
+# Запуск бота в фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
