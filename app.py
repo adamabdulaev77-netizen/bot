@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 BLOOD AI & TELEGRAM AGENT ENGINE — ENTERPRISE EDITION
+# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — STABLE PRODUCTION EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -10,7 +10,6 @@
 # aiogram>=3.0.0
 # aiosqlite>=0.19.0
 # aiohttp>=3.8.0
-# requests>=2.31.0
 # ==============================================================================
 
 import os
@@ -22,8 +21,9 @@ import json
 import logging
 import threading
 import asyncio
+import urllib.request
+import urllib.parse
 import cv2
-import requests
 import numpy as np
 import aiosqlite
 from datetime import datetime
@@ -51,12 +51,12 @@ import aiohttp
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 
-# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (например: 123456789)
+# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
-# API Ключ DeepSeek
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-7cd62ab7f0f84637ae08162b9ae10910")
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+# Обновленный API Ключ DeepSeek
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-a60a2335b9744146ad9f13c2dedba372")
+DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
@@ -75,7 +75,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("BloodEnterprise")
+logger = logging.getLogger("BloodEnterpriseEngine")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -169,7 +169,6 @@ class DatabaseManager:
             }
 
     async def get_recent_scans_log(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Логи фотографий для админа"""
         async with aiosqlite.connect(self.db_file) as db:
             query = """
                 SELECT s.id, s.user_id, s.rating, s.category, s.source, s.created_at, u.username, u.first_name, s.photo_path
@@ -196,7 +195,6 @@ class DatabaseManager:
                 return logs
 
     async def get_recent_chats_log(self, limit: int = 10) -> List[Dict[str, Any]]:
-        """Логи диалогов с ИИ для админа"""
         async with aiosqlite.connect(self.db_file) as db:
             query = """
                 SELECT c.id, c.user_id, c.user_message, c.ai_response, c.created_at, u.username, u.first_name
@@ -237,7 +235,7 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 DEEPSEEK AI AGENT (ОЦЕНКА ФОТО + ЧАТ)
+# 🧠 DEEPSEEK AI AGENT (ОЦЕНКА ФОТО И ДИАЛОГ)
 # ==============================================================================
 async def get_deepseek_chat_response(user_text: str) -> str:
     """Диалоговый ИИ-агент для общения с пользователями"""
@@ -248,9 +246,9 @@ async def get_deepseek_chat_response(user_text: str) -> str:
         }
         system_prompt = (
             "Ты — официальный ИИ-агент сервиса 'Blood'. "
-            "Ты эксперт по стилю, эстетике лица, луксмаксингу, спорту и уходу за собой. "
-            "Отвечай пользователям вежливо, уверенно, прямо и лаконично. "
-            "Применяй формат Markdown для удобства чтения."
+            "Ты эксперт по эстетике лица, векторному анализу, спорту, стилю и уходу за собой. "
+            "Отвечай пользователям прямо, уверенно, лаконично и по делу. "
+            "Используй форматирование Markdown."
         )
         payload = {
             "model": "deepseek-chat",
@@ -263,20 +261,24 @@ async def get_deepseek_chat_response(user_text: str) -> str:
         }
         try:
             async with session.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=12) as response:
+                res_text = await response.text()
                 if response.status == 200:
-                    res_data = await response.json()
+                    res_data = json.loads(res_text)
                     return res_data['choices'][0]['message']['content'].strip()
+                else:
+                    logger.error(f"DeepSeek API Chat Error Code {response.status}: {res_text}")
+                    if response.status == 402 or "insufficient_balance" in res_text.lower():
+                        return "⚠️ **Ошибка:** На балансе DeepSeek API закончились средства."
+                    elif response.status == 401:
+                        return "⚠️ **Ошибка:** Неверный API-ключ DeepSeek."
+                    else:
+                        return f"⚠️ **Ошибка API ({response.status}):** Сервер нейросети недоступен."
         except Exception as e:
             logger.error(f"Ошибка вызова DeepSeek Chat API: {e}")
         return "⚠️ Произошла временная ошибка связи с нейросетью. Попробуй написать чуть позже!"
 
 def analyze_with_deepseek(sym_pct: float, sharp_score: float, harm_score: float):
-    """Оценка векторов кадра через DeepSeek AI"""
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
+    """Оценка векторов кадра через urllib.request"""
     system_prompt = (
         "Ты — строгий, бескомпромиссный и объективный ИИ-эксперт по векторному анализу лиц на сервисе Blood. "
         "Твоя задача — давать 100% честную оценку внешности без лести. "
@@ -301,7 +303,7 @@ def analyze_with_deepseek(sym_pct: float, sharp_score: float, harm_score: float)
 
     user_prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
 
-    payload = {
+    payload = json.dumps({
         "model": "deepseek-chat",
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -309,23 +311,33 @@ def analyze_with_deepseek(sym_pct: float, sharp_score: float, harm_score: float)
         ],
         "temperature": 0.3,
         "max_tokens": 500
-    }
+    }).encode('utf-8')
+
+    req = urllib.request.Request(
+        DEEPSEEK_API_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
 
     try:
-        response = requests.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=8)
-        if response.status_code == 200:
-            res_data = response.json()
-            content = res_data['choices'][0]['message']['content'].strip()
-            if content.startswith("```json"): content = content[7:]
-            if content.endswith("```"): content = content[:-3]
-            ai_json = json.loads(content.strip())
-            return (
-                float(ai_json.get("rating", 5.5)),
-                str(ai_json.get("category", "LTN")),
-                str(ai_json.get("pros", "Базовая симметрия овала.")),
-                str(ai_json.get("cons", "Сглаженная линия челюсти.")),
-                str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
-            )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                res_data = json.loads(response.read().decode('utf-8'))
+                content = res_data['choices'][0]['message']['content'].strip()
+                if content.startswith("```json"): content = content[7:]
+                if content.endswith("```"): content = content[:-3]
+                ai_json = json.loads(content.strip())
+                return (
+                    float(ai_json.get("rating", 5.5)),
+                    str(ai_json.get("category", "LTN")),
+                    str(ai_json.get("pros", "Базовая симметрия овала.")),
+                    str(ai_json.get("cons", "Сглаженная линия челюсти.")),
+                    str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
+                )
     except Exception as e:
         logger.error(f"Ошибка при вызове DeepSeek Scoring: {e}")
 
@@ -409,7 +421,7 @@ async def cmd_start(message: Message):
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
         "🧠 Я — ИИ-агент сервиса **Blood**.\n\n"
-        "📸 **Отправь мне фото в чат** для оценки внешности или **просто напиши любой вопрос**, чтобы пообщаться со мной! 👇"
+        "📸 **Отправь мне фото в чат** для оценки внешности или **напиши любой вопрос**, чтобы пообщаться со мной! 👇"
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
@@ -455,7 +467,6 @@ async def btn_categories(message: Message):
     )
     await message.answer(categories_text, parse_mode="Markdown")
 
-# 👨‍💻 АДМИН-ПАНЕЛЬ
 @router.message(F.text == "👨‍💻 Админ-панель")
 @router.message(Command("admin"))
 async def btn_admin_panel(message: Message):
@@ -611,10 +622,8 @@ async def handle_user_document(message: Message):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
         await process_photo_message(message, message.document.file_id)
 
-# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (Текстовые сообщения)
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
-    # Игнорируем нажатия системных кнопок меню
     if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "👨‍💻 Админ-панель"]:
         return
 
@@ -625,7 +634,6 @@ async def handle_ai_chat_message(message: Message):
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
 
 def start_telegram_bot():
-    """Запуск бота в отдельном потоке"""
     async def bot_worker():
         await db.init_db()
         bot = Bot(token=BOT_TOKEN)
@@ -644,7 +652,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 FRONTEND ШАБЛОН FLASK
+# 🎨 FRONTEND ШАБЛОН BLOOD (СВЕТЛЫЙ ФОН, 0/1, 3D ВЕКТОРНЫЕ ЛИЦА)
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -652,51 +660,101 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blood — AI Face System</title>
+    <title>Blood — AI Face Evaluation</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg-dark: #040609; --accent-cyan: #00f0ff; --card-bg: rgba(10, 14, 22, 0.86); }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; user-select: none; }
-        body { background: #040609; color: #ffffff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px 12px; }
-        #animus-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
-        .animus-card { position: relative; z-index: 10; width: 100%; max-width: 530px; background: var(--card-bg); backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 20px; padding: 32px 24px; text-align: center; }
-        .header h1 { font-family: 'Orbitron', sans-serif; font-size: 2.1rem; color: #ffffff; }
-        .header p { font-size: 0.9rem; color: rgba(255, 255, 255, 0.6); margin-top: 6px; }
-        .upload-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 12px; padding: 45px 20px; cursor: pointer; margin-top: 20px; }
-        .btn-animus { display: inline-block; background: #ffffff; color: #000000; padding: 14px 36px; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 0.85rem; border: none; margin-top: 15px; }
+        :root {
+            --bg-base: #f4f5f8;
+            --text-main: #000000;
+            --accent-red: #ff0033;
+            --card-bg: rgba(255, 255, 255, 0.92);
+            --card-border: #000000;
+            --shadow-hard: 12px 12px 0px #000000;
+            --font-main: 'Space Grotesk', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-main); user-select: none; }
+        body {
+            background: linear-gradient(-45deg, #ffffff, #f0f2f5, #e6e9f0, #ffffff);
+            background-size: 400% 400%;
+            animation: gradientShift 12s ease infinite;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            position: relative;
+            padding: 20px 14px;
+        }
+        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        #binary-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        .main-card {
+            position: relative; z-index: 10; width: 100%; max-width: 540px;
+            background: var(--card-bg); backdrop-filter: blur(20px);
+            border: 3px solid var(--card-border); border-radius: 28px;
+            padding: 40px 28px; box-shadow: var(--shadow-hard); text-align: center;
+        }
+        .brand-badge {
+            display: inline-block; font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;
+            letter-spacing: 2.5px; background: var(--text-main); color: #ffffff;
+            padding: 8px 20px; border-radius: 100px; text-transform: uppercase; margin-bottom: 22px;
+        }
+        .header-title { font-size: 2.2rem; font-weight: 700; line-height: 1.25; margin-bottom: 14px; }
+        .header-title span { color: var(--accent-red); }
+        .header-subtitle { font-size: 1.05rem; color: rgba(0, 0, 0, 0.7); font-weight: 500; margin-bottom: 34px; }
+        .upload-box {
+            border: 3px dashed var(--text-main); border-radius: 20px; padding: 45px 20px;
+            cursor: pointer; background: rgba(255, 255, 255, 0.5); transition: all 0.25s ease;
+        }
+        .upload-box:hover { background: rgba(255, 0, 51, 0.04); border-color: var(--accent-red); }
+        .btn-blood {
+            display: inline-block; background: var(--accent-red); color: #ffffff;
+            font-family: var(--font-mono); font-size: 1rem; font-weight: 700;
+            padding: 16px 36px; border-radius: 14px; border: 2px solid #000000;
+            box-shadow: 4px 4px 0px #000000; text-transform: uppercase; cursor: pointer;
+        }
         #fileInput { display: none; }
-        .result-screen { display: none; flex-direction: column; align-items: center; gap: 20px; }
-        .photo-container { width: 100%; height: 320px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.2); }
-        .photo-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
-        .btn-reload { width: 100%; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); color: #ffffff; padding: 14px; font-family: 'Orbitron', sans-serif; font-weight: 800; cursor: pointer; }
+        .result-view { display: none; flex-direction: column; align-items: center; gap: 24px; }
+        .photo-preview { width: 100%; height: 320px; border-radius: 18px; border: 3px solid #000000; overflow: hidden; background: #000000; }
+        .photo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .btn-reset {
+            width: 100%; background: #ffffff; color: #000000; font-family: var(--font-mono);
+            font-weight: 700; font-size: 0.95rem; padding: 14px; border-radius: 12px;
+            border: 2px solid #000000; box-shadow: 4px 4px 0px #000000; cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <canvas id="animus-canvas"></canvas>
-    <div class="animus-card">
-        <div class="header">
-            <h1>BLOOD SYSTEM</h1>
-            <p>Векторная система оценки пропорций лица</p>
-        </div>
+    <canvas id="binary-canvas"></canvas>
+
+    <div class="main-card">
+        <div class="brand-badge">SYSTEM // BLOOD 1.0</div>
+        <h1 class="header-title">Здравствуйте, вы на сайте <span>Blood</span></h1>
+        <p class="header-subtitle">Загрузите фото и получите математический векторный анализ вашей внешности</p>
+
         {% if not data %}
         <div class="upload-box" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 2.5rem; margin-bottom: 10px;">🩸</div>
-            <div style="font-family: 'Orbitron', sans-serif; font-weight: 800;">Загрузить объект</div>
-            <div class="btn-animus">Инициация</div>
+            <span style="font-size: 3.2rem; display: block; margin-bottom: 14px;">🩸</span>
+            <div style="font-size: 1.2rem; font-weight: 700; margin-bottom: 6px;">Загрузить фотографию</div>
+            <div style="font-size: 0.85rem; font-family: var(--font-mono); color: rgba(0,0,0,0.5); margin-bottom: 24px;">[ PNG, JPG, WEBP ]</div>
+            <div class="btn-blood">Запустить расчет</div>
             <input type="file" id="fileInput" accept="image/*" onchange="uploadPhoto(this)">
         </div>
         {% endif %}
-        <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
-            <div class="photo-container">
+
+        <div class="result-view" id="resultView" style="{% if data %}display:flex;{% endif %}">
+            <div class="photo-preview">
                 <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Scan">
             </div>
-            <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; font-weight: 900;">
+            <div style="font-family: var(--font-mono); font-size: 3rem; font-weight: 700;">
                 {% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %} / 10
             </div>
-            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс</button>
+            <button class="btn-reset" onclick="location.href='/'">🔄 Загрузить новое фото</button>
         </div>
     </div>
+
     <script>
         let tgUser = { id: 0, name: 'Объект', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
@@ -706,6 +764,67 @@ HTML_TEMPLATE = """
                 tgUser.id = u.id || 0; tgUser.name = u.first_name || ''; tgUser.username = u.username || '';
             }
         }
+
+        const canvas = document.getElementById('binary-canvas');
+        const ctx = canvas.getContext('2d');
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resize); resize();
+
+        const colWidth = 20, columns = Math.floor(window.innerWidth / colWidth) + 5;
+        const drops = [], digits = ['0', '1'];
+        for (let i = 0; i < columns; i++) drops[i] = Math.floor(Math.random() * -100);
+
+        const maleFaceNodes = [
+            {x: 0, y: -130, z: 0}, {x: -30, y: -120, z: 10}, {x: 30, y: -120, z: 10},
+            {x: -50, y: -80, z: 20}, {x: 50, y: -80, z: 20}, {x: -60, y: -20, z: 30}, {x: 60, y: -20, z: 30},
+            {x: -50, y: 50, z: 25}, {x: 50, y: 50, z: 25}, {x: -25, y: 85, z: 35}, {x: 25, y: 85, z: 35}, {x: 0, y: 95, z: 40},
+            {x: -38, y: -30, z: 45}, {x: -22, y: -33, z: 48}, {x: -12, y: -30, z: 48}, {x: -22, y: -27, z: 48},
+            {x: 12, y: -30, z: 48}, {x: 22, y: -33, z: 48}, {x: 38, y: -30, z: 45}, {x: 22, y: -27, z: 48}
+        ];
+        const maleFaceEdges = [[0,1],[1,3],[3,5],[5,7],[7,9],[9,11],[11,10],[10,8],[8,6],[6,4],[4,2],[2,0],[12,13],[13,14],[14,15],[15,12],[16,17],[17,18],[18,19],[19,16]];
+
+        const femaleFaceNodes = [
+            {x: 0, y: -110, z: 0}, {x: -30, y: -100, z: 10}, {x: 30, y: -100, z: 10},
+            {x: -45, y: -50, z: 20}, {x: 45, y: -50, z: 20}, {x: -50, y: -10, z: 30}, {x: 50, y: -10, z: 30},
+            {x: -35, y: 45, z: 30}, {x: 35, y: 45, z: 30}, {x: 0, y: 85, z: 35},
+            {x: -34, y: -25, z: 42}, {x: -20, y: -29, z: 45}, {x: -10, y: -25, z: 45}, {x: -20, y: -21, z: 45},
+            {x: 10, y: -25, z: 45}, {x: 20, y: -29, z: 45}, {x: 34, y: -25, z: 42}, {x: 20, y: -21, z: 45},
+            {x: -55, y: -90, z: 5}, {x: -70, y: -30, z: -10}, {x: -75, y: 40, z: -20}, {x: -70, y: 120, z: -30},
+            {x: 55, y: -90, z: 5}, {x: 70, y: -30, z: -10}, {x: 75, y: 40, z: -20}, {x: 70, y: 120, z: -30}
+        ];
+        const femaleFaceEdges = [[0,1],[1,3],[3,5],[5,7],[7,9],[9,8],[8,6],[6,4],[4,2],[2,0],[10,11],[11,12],[12,13],[13,10],[14,15],[15,16],[16,17],[17,14],[1,18],[18,19],[19,20],[20,21],[2,22],[22,23],[23,24],[24,25]];
+
+        let rot = 0;
+        function drawFace(cx, cy, scale, nodes, edges) {
+            const cos = Math.cos(rot), sin = Math.sin(rot);
+            const proj = nodes.map(n => {
+                let x = n.x * cos - n.z * sin, z = n.x * sin + n.z * cos + 2.8;
+                return { x: cx + (x / z) * scale, y: cy - (n.y / z) * scale };
+            });
+            ctx.strokeStyle = '#ff0033'; ctx.lineWidth = 1.5;
+            edges.forEach(e => { ctx.beginPath(); ctx.moveTo(proj[e[0]].x, proj[e[0]].y); ctx.lineTo(proj[e[1]].x, proj[e[1]].y); ctx.stroke(); });
+        }
+
+        function anim() {
+            ctx.fillStyle = 'rgba(244, 245, 248, 0.28)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.16)'; ctx.font = '15px "Space Mono", monospace';
+            for (let i = 0; i < drops.length; i++) {
+                ctx.fillText(digits[Math.floor(Math.random() * digits.length)], i * colWidth, drops[i] * 22);
+                if (drops[i] * 22 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                drops[i]++;
+            }
+            rot += 0.012;
+            if (canvas.width > 768) {
+                drawFace(140, canvas.height / 2, 2.2, maleFaceNodes, maleFaceEdges);
+                drawFace(canvas.width - 140, canvas.height / 2, 2.2, femaleFaceNodes, femaleFaceEdges);
+            } else {
+                drawFace(canvas.width / 2, 100, 1.3, maleFaceNodes, maleFaceEdges);
+            }
+            requestAnimationFrame(anim);
+        }
+        anim();
+
         async function uploadPhoto(input) {
             if (!input.files || !input.files[0]) return;
             const formData = new FormData();
@@ -795,7 +914,7 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск телеграм-бота в отдельном фоновом потоке
+# Запуск бота в отдельном фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
