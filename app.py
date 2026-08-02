@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — STABLE AQ-KEY EDITION
+# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — GROQ (LLAMA 3) EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -53,8 +53,9 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT
 # ⚠️ Твой Telegram ID
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
-# Твой проверенный ключ Gemini API
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6L_d7mlMG6Ll2-AOcYpYu3uaYdo-UgibXswSuwp7dKBug")
+# Ключ Groq API
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
@@ -73,7 +74,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("BloodEnterprise")
+logger = logging.getLogger("BloodGroqEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -233,47 +234,40 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 УНИВЕРСАЛЬНЫЙ GEMINI AI ДВИЖОК ПОД КЛЮЧИ AQ...
+# 🧠 БЕСПЛАТНЫЙ GROQ AI ДВИЖОК (LLAMA 3.1)
 # ==============================================================================
-def ask_gemini_ai(prompt: str, system_instruction: str = "") -> str:
-    key = GEMINI_API_KEY.strip()
+def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
+        "Content-Type": "application/json"
+    }
     
-    contents = []
+    messages = []
     if system_instruction:
-        contents.append({"role": "user", "parts": [{"text": f"Инструкция: {system_instruction}"}]})
-    contents.append({"role": "user", "parts": [{"text": prompt}]})
-    data = {"contents": contents}
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
 
-    # Вариант 1: Запрос с Authorization Bearer Header (стандарт для ключей AQ...)
-    try:
-        url_bearer = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        headers_bearer = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {key}"
-        }
-        r1 = requests.post(url_bearer, json=data, headers=headers_bearer, timeout=8)
-        if r1.status_code == 200:
-            return r1.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception as e:
-        logger.error(f"Bearer attempt failed: {e}")
+    data = {
+        "model": "llama-3.1-70b-versatile",
+        "messages": messages,
+        "temperature": 0.7
+    }
 
-    # Вариант 2: Запрос через параметр URL ?key=
     try:
-        url_key = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
-        headers_plain = {"Content-Type": "application/json"}
-        r2 = requests.post(url_key, json=data, headers=headers_plain, timeout=8)
-        if r2.status_code == 200:
-            return r2.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=10)
+        if r.status_code == 200:
+            res_json = r.json()
+            return res_json["choices"][0]["message"]["content"].strip()
         else:
-            logger.error(f"Param key attempt failed [{r2.status_code}]: {r2.text[:150]}")
+            logger.error(f"Groq API Error [{r.status_code}]: {r.text[:200]}")
+            return f"⚠️ Ошибка Groq API ({r.status_code})."
     except Exception as e:
-        logger.error(f"Param key attempt error: {e}")
+        logger.error(f"Ошибка вызова Groq AI: {e}")
+        return "⚠️ Произошла ошибка связи с нейросетью."
 
-    return "⚠️ Произошла ошибка связи с нейросетью."
-
-def analyze_with_gemini(sym_pct: float, sharp_score: float, harm_score: float):
+def analyze_with_groq(sym_pct: float, sharp_score: float, harm_score: float):
     system_prompt = (
-        "Ты — строгий ИИ-эксперт по анализу внешней привлекательности и луксмаксингу. "
+        "Ты — строгий ИИ-эксперт по анализу внешней привлекательности и луксмаксингу на сервисе Blood. "
         "Оценивай внешность человека по шкале от 1.0 до 10.0. "
         "Верни ответ СТРОГО в формате JSON без markdown разметки:\n"
         '{"rating": 6.4, "category": "MTN", "pros": "Плюсы...", "cons": "Минусы...", "recs": "Советы..."}'
@@ -281,7 +275,7 @@ def analyze_with_gemini(sym_pct: float, sharp_score: float, harm_score: float):
 
     prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
 
-    response_text = ask_gemini_ai(prompt, system_prompt)
+    response_text = ask_groq_ai(prompt, system_prompt)
     try:
         if response_text.startswith("```json"): response_text = response_text[7:]
         if response_text.endswith("```"): response_text = response_text[:-3]
@@ -328,7 +322,7 @@ def analyze_opencv(image_path: str):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     harm_score = round(min(10.0, max(1.0, (np.mean(hsv[:, :, 1]) / 25.5) * 0.5 + (np.mean(hsv[:, :, 2]) / 25.5) * 0.5)), 1)
 
-    rating, cat, pros, cons, recs = analyze_with_gemini(sym_pct, sharp_score, harm_score)
+    rating, cat, pros, cons, recs = analyze_with_groq(sym_pct, sharp_score, harm_score)
 
     cat_cls = "cat-HTN" if rating >= 7.0 else ("cat-MTN" if rating >= 6.0 else "cat-LTN")
     color = "#00e5ff" if rating >= 8.0 else "#ffffff"
@@ -515,7 +509,7 @@ async def callback_admin_chats(call: CallbackQuery):
     await call.answer()
 
 async def process_photo_message(message: Message, file_id: str):
-    status_msg = await message.reply("🧠 **Gemini AI проводит биометрический анализ...**", parse_mode="Markdown")
+    status_msg = await message.reply("🧠 **Groq AI проводит биометрический анализ...**", parse_mode="Markdown")
     try:
         file_info = await message.bot.get_file(file_id)
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
@@ -585,8 +579,8 @@ async def handle_ai_chat_message(message: Message):
     status_msg = await message.answer("💬 *ИИ-агент Blood обдумывает ответ...*", parse_mode="Markdown")
     
     loop = asyncio.get_event_loop()
-    sys_prompt = "Ты — ИИ-агент сервиса Blood. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо и дружелюбно."
-    ai_reply = await loop.run_in_executor(None, ask_gemini_ai, message.text, sys_prompt)
+    sys_prompt = "Ты — ИИ-агент сервиса Blood. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, четко и дружелюбно."
+    ai_reply = await loop.run_in_executor(None, ask_groq_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
@@ -604,7 +598,10 @@ def start_telegram_bot():
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
-        logger.info("Телеграм-бот с Gemini AI запущен.")
+        
+        await bot.delete_webhook(drop_pending_updates=True)
+        
+        logger.info("Телеграм-бот с Groq AI запущен.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
@@ -861,7 +858,7 @@ def analyze():
                         f"👤 **Имя:** {user_name}\n"
                         f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
                         f"🆔 **ID:** `{user_id}`\n"
-                        f"🧠 **Gemini Оценка:** `{rating}/10` ({category})"
+                        f"🧠 **Groq Оценка:** `{rating}/10` ({category})"
                     )
                     photo_file = FSInputFile(filepath)
                     await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
