@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (STABLE PRODUCTION SINGLE-FILE)
+# 🌐 BLOOD AI & TELEGRAM AGENT ENGINE — ENTERPRISE EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -10,6 +10,7 @@
 # aiogram>=3.0.0
 # aiosqlite>=0.19.0
 # aiohttp>=3.8.0
+# requests>=2.31.0
 # ==============================================================================
 
 import os
@@ -17,10 +18,12 @@ import sys
 import time
 import uuid
 import math
+import json
 import logging
 import threading
 import asyncio
 import cv2
+import requests
 import numpy as np
 import aiosqlite
 from datetime import datetime
@@ -51,6 +54,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT
 # ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID (например: 123456789)
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
+# API Ключ DeepSeek
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-7cd62ab7f0f84637ae08162b9ae10910")
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
@@ -68,7 +75,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("AnimusMatrixEnterprise")
+logger = logging.getLogger("BloodEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -88,6 +95,7 @@ class DatabaseManager:
                     username TEXT,
                     first_name TEXT,
                     scans_count INTEGER DEFAULT 0,
+                    chats_count INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -99,6 +107,15 @@ class DatabaseManager:
                     category TEXT,
                     photo_path TEXT,
                     source TEXT DEFAULT 'bot',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    user_message TEXT,
+                    ai_response TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -125,22 +142,34 @@ class DatabaseManager:
             await db.execute("UPDATE users SET scans_count = scans_count + 1 WHERE user_id = ?", (user_id,))
             await db.commit()
 
+    async def add_chat_log(self, user_id: int, user_message: str, ai_response: str):
+        async with aiosqlite.connect(self.db_file) as db:
+            await db.execute("""
+                INSERT INTO chats (user_id, user_message, ai_response)
+                VALUES (?, ?, ?)
+            """, (user_id, user_message, ai_response))
+            await db.execute("UPDATE users SET chats_count = chats_count + 1 WHERE user_id = ?", (user_id,))
+            await db.commit()
+
     async def get_user_stats(self, user_id: int) -> Dict[str, Any]:
         async with aiosqlite.connect(self.db_file) as db:
-            async with db.execute("SELECT scans_count FROM users WHERE user_id = ?", (user_id,)) as cursor:
+            async with db.execute("SELECT scans_count, chats_count FROM users WHERE user_id = ?", (user_id,)) as cursor:
                 row = await cursor.fetchone()
                 scans = row[0] if row else 0
+                chats = row[1] if row else 0
 
             async with db.execute("SELECT AVG(rating), MAX(rating) FROM scans WHERE user_id = ?", (user_id,)) as cursor:
                 avg_r, max_r = await cursor.fetchone()
 
             return {
                 "scans": scans,
+                "chats": chats,
                 "avg_rating": round(avg_r, 1) if avg_r else 0.0,
                 "max_rating": round(max_r, 1) if max_r else 0.0
             }
 
     async def get_recent_scans_log(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Логи фотографий для админа"""
         async with aiosqlite.connect(self.db_file) as db:
             query = """
                 SELECT s.id, s.user_id, s.rating, s.category, s.source, s.created_at, u.username, u.first_name, s.photo_path
@@ -166,46 +195,149 @@ class DatabaseManager:
                     })
                 return logs
 
+    async def get_recent_chats_log(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Логи диалогов с ИИ для админа"""
+        async with aiosqlite.connect(self.db_file) as db:
+            query = """
+                SELECT c.id, c.user_id, c.user_message, c.ai_response, c.created_at, u.username, u.first_name
+                FROM chats c
+                LEFT JOIN users u ON c.user_id = u.user_id
+                ORDER BY c.created_at DESC
+                LIMIT ?
+            """
+            async with db.execute(query, (limit,)) as cursor:
+                rows = await cursor.fetchall()
+                logs = []
+                for r in rows:
+                    logs.append({
+                        "chat_id": r[0],
+                        "user_id": r[1],
+                        "user_message": r[2],
+                        "ai_response": r[3],
+                        "created_at": r[4],
+                        "username": r[5] or "нет",
+                        "first_name": r[6] or "Гость"
+                    })
+                return logs
+
     async def get_global_stats(self) -> Dict[str, Any]:
         async with aiosqlite.connect(self.db_file) as db:
             async with db.execute("SELECT COUNT(*) FROM users") as c1:
                 total_users = (await c1.fetchone())[0]
             async with db.execute("SELECT COUNT(*) FROM scans") as c2:
                 total_scans = (await c2.fetchone())[0]
+            async with db.execute("SELECT COUNT(*) FROM chats") as c3:
+                total_chats = (await c3.fetchone())[0]
             return {
                 "total_users": total_users,
-                "total_scans": total_scans
+                "total_scans": total_scans,
+                "total_chats": total_chats
             }
 
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🔬 OPENCV МАТЕМАТИЧЕСКИЙ АНАЛИЗАТОР
+# 🧠 DEEPSEEK AI AGENT (ОЦЕНКА ФОТО + ЧАТ)
 # ==============================================================================
-def generate_looksmaxing_report(rating: float, sym_pct: float, sharp_val: float, harm_val: float) -> Dict[str, str]:
-    if rating >= 8.5:
-        pros = f"Синхронизация с идеальной моделью Анимуса ({sym_pct}%). Идеально очерченная челюстная дуга, высокий индекс четкости контуров ({sharp_val}/10.0)."
-        cons = "Минорные недочеты в распределении цифрового освещения кадра."
-        recs = "Поддерживай процент жира в организме в пределах 10-12%. Соблюдай питьевой режим и сохраняй осанку (мьюинг)."
-    elif rating >= 7.0:
-        pros = f"Высокий гармонический потенциал структуры лица. Симметрия овала составляет {sym_pct}%."
-        cons = f"Легкий асимметричный сдвиг в области подбородка. Индекс резкости: {sharp_val}/10.0."
-        recs = "Сфокусируйся на снижении процента подкожного жира для максимального выделения скуловых костей."
-    elif rating >= 5.5:
-        pros = f"Удовлетворительный овал лица с коэффициентом цветовой гармонии {harm_val}/10.0. Симметрия: {sym_pct}%."
-        cons = f"Сглаженная линия челюсти, сниженная резкость деталей ({sharp_val}/10.0)."
-        recs = "Оптимизируй рацион для борьбы с отекшим овалом лица, делай массаж Гуаша, исправь осанку."
-    else:
-        pros = f"Базовый баланс цветовой гаммы кадра ({harm_val}/10.0)."
-        cons = f"Заметная асимметрия овала ({sym_pct}%). Низкий индекс контурной резкости ({sharp_val}/10.0)."
-        recs = "Начни комплексную трансформацию: дефаттинг (снижение жира), силовые тренировки, исправление осанки."
+async def get_deepseek_chat_response(user_text: str) -> str:
+    """Диалоговый ИИ-агент для общения с пользователями"""
+    async with aiohttp.ClientSession() as session:
+        headers = {
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        system_prompt = (
+            "Ты — официальный ИИ-агент сервиса 'Blood'. "
+            "Ты эксперт по стилю, эстетике лица, луксмаксингу, спорту и уходу за собой. "
+            "Отвечай пользователям вежливо, уверенно, прямо и лаконично. "
+            "Применяй формат Markdown для удобства чтения."
+        )
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 700
+        }
+        try:
+            async with session.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=12) as response:
+                if response.status == 200:
+                    res_data = await response.json()
+                    return res_data['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            logger.error(f"Ошибка вызова DeepSeek Chat API: {e}")
+        return "⚠️ Произошла временная ошибка связи с нейросетью. Попробуй написать чуть позже!"
 
-    return {"pros": pros, "cons": cons, "recs": recs}
+def analyze_with_deepseek(sym_pct: float, sharp_score: float, harm_score: float):
+    """Оценка векторов кадра через DeepSeek AI"""
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    system_prompt = (
+        "Ты — строгий, бескомпромиссный и объективный ИИ-эксперт по векторному анализу лиц на сервисе Blood. "
+        "Твоя задача — давать 100% честную оценку внешности без лести. "
+        "Оценивай человека по шкале от 1.0 до 10.0 с точностью до десятых. "
+        "Шкала категорий:\n"
+        "1.0 - 2.9: SUB 3\n"
+        "3.0 - 4.9: SUB 5\n"
+        "5.0 - 5.9: LTN (Low Tier Normal)\n"
+        "6.0 - 6.9: MTN (Mid Tier Normal)\n"
+        "7.0 - 7.9: HTN (High Tier Normal)\n"
+        "8.0 - 9.9: CHAD\n"
+        "10.0: TRUE ADAM\n\n"
+        "ВАЖНО: Верни ответ СТРОГО в формате JSON без разметки markdown, со структурой:\n"
+        "{\n"
+        '  "rating": 6.4,\n'
+        '  "category": "MTN",\n'
+        '  "pros": "Честное описание сильных сторон (1-2 предложения)",\n'
+        '  "cons": "Честное описание слабых сторон или недостатков (1-2 предложения)",\n'
+        '  "recs": "Конкретные практические советы по луксмаксингу и уходу (2-3 предложения)"\n'
+        "}"
+    )
+
+    user_prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 500
+    }
+
+    try:
+        response = requests.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=8)
+        if response.status_code == 200:
+            res_data = response.json()
+            content = res_data['choices'][0]['message']['content'].strip()
+            if content.startswith("```json"): content = content[7:]
+            if content.endswith("```"): content = content[:-3]
+            ai_json = json.loads(content.strip())
+            return (
+                float(ai_json.get("rating", 5.5)),
+                str(ai_json.get("category", "LTN")),
+                str(ai_json.get("pros", "Базовая симметрия овала.")),
+                str(ai_json.get("cons", "Сглаженная линия челюсти.")),
+                str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при вызове DeepSeek Scoring: {e}")
+
+    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
+    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
+    cat = "MTN" if rating >= 6.0 else "LTN"
+    return rating, cat, f"Симметрия лица {sym_pct}%.", "Недостаточная выраженность скул.", "Держи осанку и занимайся спортом."
 
 def analyze_opencv(image_path: str):
     img = cv2.imread(image_path)
     if img is None:
-        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, generate_looksmaxing_report(5.0, 50.0, 5.0, 5.0)
+        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, {"pros": "-", "cons": "-", "recs": "-"}
 
     h, w = img.shape[:2]
     max_dim = 800
@@ -229,19 +361,13 @@ def analyze_opencv(image_path: str):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     harm_score = round(min(10.0, max(1.0, (np.mean(hsv[:, :, 1]) / 25.5) * 0.5 + (np.mean(hsv[:, :, 2]) / 25.5) * 0.5)), 1)
 
-    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
-    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
+    rating, cat, pros, cons, recs = analyze_with_deepseek(sym_pct, sharp_score, harm_score)
 
-    if rating < 3.0: cat, cat_cls, color = "SUB 3", "cat-SUB3", "#ff3333"
-    elif rating < 5.0: cat, cat_cls, color = "SUB 5", "cat-SUB5", "#ff8833"
-    elif rating < 6.0: cat, cat_cls, color = "LTN", "cat-LTN", "#e6e6e6"
-    elif rating < 7.0: cat, cat_cls, color = "MTN", "cat-MTN", "#cccccc"
-    elif rating < 8.0: cat, cat_cls, color = "HTN", "cat-HTN", "#ffffff"
-    elif rating < 10.0: cat, cat_cls, color = "CHAD", "cat-CHAD", "#00e5ff"
-    else: cat, cat_cls, color = "TRUE ADAM", "cat-TRUE_ADAM", "#ffd700"
+    cat_cls = "cat-HTN" if rating >= 7.0 else ("cat-MTN" if rating >= 6.0 else "cat-LTN")
+    color = "#00e5ff" if rating >= 8.0 else "#ffffff"
 
     details = {"symmetry": sym_pct, "sharpness": sharp_score, "harmony": harm_score}
-    report = generate_looksmaxing_report(rating, sym_pct, sharp_score, harm_score)
+    report = {"pros": pros, "cons": cons, "recs": recs}
 
     return rating, cat, cat_cls, color, details, report
 
@@ -261,7 +387,7 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 
 def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton(text="📜 Логи пользователей (Последние 10)", callback_data="admin_logs")],
+        [InlineKeyboardButton(text="📸 Фотки", callback_data="admin_photos"), InlineKeyboardButton(text="💬 Чаты", callback_data="admin_chats")],
         [InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_stats")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -282,8 +408,8 @@ async def cmd_start(message: Message):
     await db.register_user(message.from_user.id, message.from_user.username or "", message.from_user.first_name)
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
-        "🔥 Я — ИИ-агент по векторному анализу привлекательности, пропорций и геометрии лица.\n\n"
-        "📸 **Отправь мне фото в чат** или нажми на кнопку **«Открыть WebApp»** ниже! 👇"
+        "🧠 Я — ИИ-агент сервиса **Blood**.\n\n"
+        "📸 **Отправь мне фото в чат** для оценки внешности или **просто напиши любой вопрос**, чтобы пообщаться со мной! 👇"
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
@@ -291,12 +417,7 @@ async def cmd_start(message: Message):
     if os.path.exists(video_path):
         try:
             video_file = FSInputFile(video_path)
-            await message.answer_video(
-                video=video_file,
-                caption=welcome_text,
-                parse_mode="Markdown",
-                reply_markup=kb
-            )
+            await message.answer_video(video=video_file, caption=welcome_text, parse_mode="Markdown", reply_markup=kb)
             return
         except Exception as e:
             logger.error(f"Ошибка при отправке logo.mp4: {e}")
@@ -313,7 +434,8 @@ async def btn_profile(message: Message):
     profile_text = (
         f"👤 **Профиль:** {message.from_user.first_name}\n"
         f"🆔 **ID:** `{message.from_user.id}`\n\n"
-        f"📈 **Проверок сделано:** {stats['scans']}\n"
+        f"📸 **Проверок сделано:** {stats['scans']}\n"
+        f"💬 **Вопросов ИИ-агенту:** {stats['chats']}\n"
         f"⭐ **Средний балл:** `{stats['avg_rating']} / 10`\n"
         f"🔥 **Максимальный балл:** `{stats['max_rating']} / 10`"
     )
@@ -333,6 +455,7 @@ async def btn_categories(message: Message):
     )
     await message.answer(categories_text, parse_mode="Markdown")
 
+# 👨‍💻 АДМИН-ПАНЕЛЬ
 @router.message(F.text == "👨‍💻 Админ-панель")
 @router.message(Command("admin"))
 async def btn_admin_panel(message: Message):
@@ -342,7 +465,7 @@ async def btn_admin_panel(message: Message):
 
     admin_text = (
         "👑 **ПАНЕЛЬ ВЛАДЕЛЬЦА СИСТЕМЫ**\n\n"
-        "Здесь вы можете просматривать последние логи проверок пользователей, их ID, юзернеймы и загруженные фотографии."
+        "Выберите нужный раздел для просмотра логов фото или переписок пользователей:"
     )
     await message.answer(admin_text, parse_mode="Markdown", reply_markup=get_admin_inline_keyboard())
 
@@ -356,24 +479,25 @@ async def callback_admin_stats(call: CallbackQuery):
     text = (
         "📊 **ГЛОБАЛЬНАЯ СТАТИСТИКА ПРОЕКТА:**\n\n"
         f"👥 **Всего пользователей:** `{stats['total_users']}`\n"
-        f"📸 **Всего сканирований:** `{stats['total_scans']}`"
+        f"📸 **Всего сканирований:** `{stats['total_scans']}`\n"
+        f"💬 **Всего сообщений в ИИ-чате:** `{stats['total_chats']}`"
     )
     await call.message.edit_text(text, parse_mode="Markdown", reply_markup=get_admin_inline_keyboard())
     await call.answer()
 
-@router.callback_query(F.data == "admin_logs")
-async def callback_admin_logs(call: CallbackQuery):
+@router.callback_query(F.data == "admin_photos")
+async def callback_admin_photos(call: CallbackQuery):
     if not ADMIN_ID or call.from_user.id != ADMIN_ID:
         await call.answer("Доступ запрещен", show_alert=True)
         return
 
     logs = await db.get_recent_scans_log(limit=8)
     if not logs:
-        await call.message.edit_text("📜 Логов пока нет.", reply_markup=get_admin_inline_keyboard())
+        await call.message.edit_text("📸 Логов фотографий пока нет.", reply_markup=get_admin_inline_keyboard())
         await call.answer()
         return
 
-    await call.message.edit_text("⏳ **Загружаю список последних проверок...**")
+    await call.message.edit_text("⏳ **Загружаю список последних фотографий...**")
 
     for log in logs:
         src_icon = "🌐 Сайт/WebApp" if log['source'] == "web" else "🤖 Чат Бота"
@@ -385,7 +509,6 @@ async def callback_admin_logs(call: CallbackQuery):
             f"📊 **Рейтинг:** `{log['rating']}/10` ({log['category']})\n"
             f"📅 **Время:** `{log['created_at']}`"
         )
-        
         if os.path.exists(log['photo_path']):
             try:
                 photo_file = FSInputFile(log['photo_path'])
@@ -395,11 +518,38 @@ async def callback_admin_logs(call: CallbackQuery):
         else:
             await call.message.answer(log_text, parse_mode="Markdown")
 
-    await call.message.answer("📜 **Выше приведена выгрузка последних записей.**", reply_markup=get_admin_inline_keyboard())
+    await call.message.answer("📸 **Выше приведены последние загруженные снимки.**", reply_markup=get_admin_inline_keyboard())
+    await call.answer()
+
+@router.callback_query(F.data == "admin_chats")
+async def callback_admin_chats(call: CallbackQuery):
+    if not ADMIN_ID or call.from_user.id != ADMIN_ID:
+        await call.answer("Доступ запрещен", show_alert=True)
+        return
+
+    logs = await db.get_recent_chats_log(limit=8)
+    if not logs:
+        await call.message.edit_text("💬 Логов диалогов пока нет.", reply_markup=get_admin_inline_keyboard())
+        await call.answer()
+        return
+
+    await call.message.edit_text("⏳ **Загружаю список диалогов с ИИ...**")
+
+    for log in logs:
+        chat_text = (
+            f"👤 **Имя:** {log['first_name']} (@{log['username']})\n"
+            f"🆔 **ID:** `{log['user_id']}`\n"
+            f"📅 **Время:** `{log['created_at']}`\n\n"
+            f"❓ **Вопрос пользователя:**\n_{log['user_message']}_\n\n"
+            f"🤖 **Ответ ИИ-агента:**\n{log['ai_response']}"
+        )
+        await call.message.answer(chat_text, parse_mode="Markdown")
+
+    await call.message.answer("💬 **Выше приведена выгрузка последних диалогов.**", reply_markup=get_admin_inline_keyboard())
     await call.answer()
 
 async def process_photo_message(message: Message, file_id: str):
-    status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото в Анимус...**", parse_mode="Markdown")
+    status_msg = await message.reply("🧠 **DeepSeek AI проводит биометрический анализ...**", parse_mode="Markdown")
     try:
         file_info = await message.bot.get_file(file_id)
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
@@ -409,18 +559,14 @@ async def process_photo_message(message: Message, file_id: str):
         saved_photo_path = os.path.join(PHOTOS_DIR, local_filename)
 
         await message.bot.download_file(file_info.file_path, saved_photo_path)
-        logger.info(f"[LOG OWNER] Загружено фото из чата ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
+        logger.info(f"[LOG OWNER] Загружено фото из ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
 
         rating, category, cat_class, color_hex, details, report = analyze_opencv(saved_photo_path)
         scan_id = f"{uuid.uuid4().hex}_{int(time.time())}"
 
         results_db[scan_id] = {
-            "rating": rating,
-            "category": category,
-            "cat_class": cat_class,
-            "color_hex": color_hex,
-            "details": details,
-            "report": report,
+            "rating": rating, "category": category, "cat_class": cat_class,
+            "color_hex": color_hex, "details": details, "report": report,
             "image_filename": local_filename
         }
 
@@ -438,23 +584,23 @@ async def process_photo_message(message: Message, file_id: str):
                     f"👤 **Имя:** {message.from_user.full_name}\n"
                     f"🏷 **Юзернейм:** @{message.from_user.username or 'отсутствует'}\n"
                     f"🆔 **ID:** `{message.from_user.id}`\n"
-                    f"📊 **Оценка:** `{rating}/10`"
+                    f"📊 **Оценка:** `{rating}/10` ({category})"
                 )
                 await message.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=admin_caption, parse_mode="Markdown")
             except Exception as adm_err:
                 logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
         await status_msg.edit_text(
-            f"✅ **Анализ генетического кода завершен!**\n\n"
+            f"✅ **Анализ геометрии лица завершен!**\n\n"
             f"📊 **Твой рейтинг:** `{rating} / 10`\n"
             f"🏷 **Категория:** `{category}`\n\n"
-            f"👇 **Нажми на кнопку ниже, чтобы открыть интерактивную карточку:**",
+            f"👇 **Нажми на кнопку ниже, чтобы открыть карточку:**",
             parse_mode="Markdown",
             reply_markup=get_result_inline_keyboard(scan_id)
         )
     except Exception as e:
         logger.error(f"Ошибка при обработке фото: {e}", exc_info=True)
-        await status_msg.edit_text("❌ Произошла ошибка при векторной обработке.")
+        await status_msg.edit_text("❌ Произошла ошибка при обработке кадра.")
 
 @router.message(F.photo)
 async def handle_user_photo(message: Message):
@@ -465,14 +611,27 @@ async def handle_user_document(message: Message):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
         await process_photo_message(message, message.document.file_id)
 
+# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (Текстовые сообщения)
+@router.message(F.text & ~F.text.startswith("/"))
+async def handle_ai_chat_message(message: Message):
+    # Игнорируем нажатия системных кнопок меню
+    if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "👨‍💻 Админ-панель"]:
+        return
+
+    status_msg = await message.answer("💬 *ИИ-агент Blood обдумывает ответ...*", parse_mode="Markdown")
+    ai_reply = await get_deepseek_chat_response(message.text)
+    
+    await status_msg.edit_text(ai_reply, parse_mode="Markdown")
+    await db.add_chat_log(message.from_user.id, message.text, ai_reply)
+
 def start_telegram_bot():
-    """Безопасный запуск бота внутри фонового потока с отключенным перехватом сигналов main thread."""
+    """Запуск бота в отдельном потоке"""
     async def bot_worker():
         await db.init_db()
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
-        logger.info("Телеграм-бот успешно инициализирован и слушает команды.")
+        logger.info("Телеграм-бот с ИИ-агентом запущен.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
@@ -485,7 +644,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE
+# 🎨 FRONTEND ШАБЛОН FLASK
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -493,674 +652,78 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ANIMUS 3.0 — Memory Corridor Synchronization</title>
+    <title>Blood — AI Face System</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --animus-white: #ffffff;
-            --animus-silver: #e0e6ed;
-            --animus-gray: rgba(255, 255, 255, 0.15);
-            --animus-glow: rgba(255, 255, 255, 0.85);
-            --animus-cyan: #00f0ff;
-            --animus-card: rgba(12, 16, 24, 0.82);
-            --animus-border: rgba(255, 255, 255, 0.25);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Rajdhani', sans-serif;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        body {
-            background: #05070a;
-            color: #ffffff;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow-x: hidden;
-            position: relative;
-            padding: 20px 12px;
-        }
-
-        #animus-canvas, #confetti-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-        #animus-canvas { z-index: 0; }
-        #confetti-canvas { z-index: 100; }
-
-        .scanline-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-            background-size: 100% 3px, 6px 100%;
-            pointer-events: none;
-            z-index: 2;
-        }
-
-        .animus-card {
-            position: relative;
-            z-index: 10;
-            width: 100%;
-            max-width: 530px;
-            background: var(--animus-card);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
-            border: 1px solid var(--animus-border);
-            border-radius: 20px;
-            padding: 32px 24px;
-            box-shadow: 0 0 50px rgba(255, 255, 255, 0.12),
-                        inset 0 0 20px rgba(255, 255, 255, 0.05);
-            animation: animusAppear 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            clip-path: polygon(0 0, 95% 0, 100% 5%, 100% 100%, 5% 100%, 0 95%);
-        }
-
-        @keyframes animusAppear {
-            from { opacity: 0; transform: scale(0.92) translateY(30px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-        }
-
-        .animus-corner {
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #ffffff;
-            pointer-events: none;
-        }
-        .top-left { top: 8px; left: 8px; border-right: none; border-bottom: none; }
-        .bottom-right { bottom: 8px; right: 8px; border-left: none; border-top: none; }
-
-        .header {
-            text-align: center;
-            margin-bottom: 24px;
-            position: relative;
-        }
-        .header .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 16px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: #ffffff;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
-        }
-        .header h1 {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 2.1rem;
-            font-weight: 900;
-            letter-spacing: 2px;
-            color: #ffffff;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
-            text-transform: uppercase;
-        }
-        .header p {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.6);
-            margin-top: 6px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-
-        .upload-box {
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            padding: 45px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.4s ease;
-            background: rgba(255, 255, 255, 0.02);
-            position: relative;
-            overflow: hidden;
-        }
-        .upload-box:hover {
-            border-color: #ffffff;
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
-        }
-        .upload-icon {
-            font-size: 2.8rem;
-            margin-bottom: 12px;
-            color: #ffffff;
-            text-shadow: 0 0 15px #ffffff;
-        }
-        .upload-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 800;
-            color: #ffffff;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-        .upload-subtitle {
-            font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.5);
-            margin-top: 4px;
-            margin-bottom: 22px;
-        }
-        .btn-animus {
-            display: inline-block;
-            background: #ffffff;
-            color: #000000;
-            padding: 14px 36px;
-            font-family: 'Orbitron', sans-serif;
-            font-weight: 900;
-            font-size: 0.85rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            border: none;
-            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-            transition: all 0.3s ease;
-        }
-        .btn-animus:hover {
-            background: var(--animus-cyan);
-            box-shadow: 0 0 30px var(--animus-cyan);
-        }
+        :root { --bg-dark: #040609; --accent-cyan: #00f0ff; --card-bg: rgba(10, 14, 22, 0.86); }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Rajdhani', sans-serif; user-select: none; }
+        body { background: #040609; color: #ffffff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px 12px; }
+        #animus-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+        .animus-card { position: relative; z-index: 10; width: 100%; max-width: 530px; background: var(--card-bg); backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 20px; padding: 32px 24px; text-align: center; }
+        .header h1 { font-family: 'Orbitron', sans-serif; font-size: 2.1rem; color: #ffffff; }
+        .header p { font-size: 0.9rem; color: rgba(255, 255, 255, 0.6); margin-top: 6px; }
+        .upload-box { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 12px; padding: 45px 20px; cursor: pointer; margin-top: 20px; }
+        .btn-animus { display: inline-block; background: #ffffff; color: #000000; padding: 14px 36px; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 0.85rem; border: none; margin-top: 15px; }
         #fileInput { display: none; }
-
-        .loader-screen {
-            display: none;
-            text-align: center;
-            padding: 40px 10px;
-        }
-        .laser-loader {
-            width: 100%;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.1);
-            position: relative;
-            overflow: hidden;
-            margin-bottom: 20px;
-        }
-        .laser-line {
-            position: absolute;
-            top: 0;
-            left: -50%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, #ffffff, transparent);
-            animation: laserScan 1.2s infinite ease-in-out;
-        }
-        @keyframes laserScan {
-            0% { left: -50%; }
-            100% { left: 100%; }
-        }
-        .loader-text {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.9rem;
-            letter-spacing: 2px;
-            color: #ffffff;
-            text-transform: uppercase;
-        }
-
-        .result-screen {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 22px;
-        }
-
-        .photo-container {
-            width: 100%;
-            height: 330px;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: #000000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
-        }
-        .photo-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-
-        .gauge-box {
-            position: relative;
-            width: 190px;
-            height: 190px;
-        }
-        .gauge-box svg {
-            width: 100%;
-            height: 100%;
-            transform: rotate(-90deg);
-        }
-        .gauge-bg-track {
-            fill: none;
-            stroke: rgba(255, 255, 255, 0.08);
-            stroke-width: 12;
-        }
-        .gauge-fill-bar {
-            fill: none;
-            stroke-width: 12;
-            stroke-linecap: square;
-            stroke-dasharray: 565.48;
-            stroke-dashoffset: 565.48;
-            transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .gauge-center {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }
-        .score-num {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 3.5rem;
-            font-weight: 900;
-            line-height: 1;
-            color: #ffffff;
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
-        }
-        .score-lbl {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.5);
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        .category-badge {
-            padding: 10px 32px;
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.35rem;
-            font-weight: 900;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            background: rgba(255, 255, 255, 0.05);
-            box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
-            clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
-        }
-
-        .metrics-card {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-        .metric-row { display: flex; flex-direction: column; gap: 6px; }
-        .metric-info { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-        .metric-name { color: rgba(255, 255, 255, 0.6); }
-        .metric-value { color: #ffffff; }
-        .track-bar {
-            height: 6px;
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 2px;
-            overflow: hidden;
-        }
-        .fill-bar {
-            height: 100%;
-            width: 0%;
-            background: #ffffff;
-            box-shadow: 0 0 10px #ffffff;
-            transition: width 1.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .report-box {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .report-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 16px;
-            text-align: left;
-        }
-        .report-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.85rem;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            margin-bottom: 6px;
-            text-transform: uppercase;
-        }
-        .title-pros { color: #ffffff; }
-        .title-cons { color: #ff5555; }
-        .title-recs { color: var(--animus-cyan); }
-        .report-text {
-            font-size: 0.88rem;
-            color: rgba(255, 255, 255, 0.75);
-            line-height: 1.45;
-        }
-
-        .btn-reload {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            color: #ffffff;
-            padding: 14px;
-            font-family: 'Orbitron', sans-serif;
-            font-weight: 800;
-            font-size: 0.85rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        .btn-reload:hover { background: #ffffff; color: #000000; }
+        .result-screen { display: none; flex-direction: column; align-items: center; gap: 20px; }
+        .photo-container { width: 100%; height: 320px; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .photo-container img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        .btn-reload { width: 100%; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); color: #ffffff; padding: 14px; font-family: 'Orbitron', sans-serif; font-weight: 800; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="scanline-overlay"></div>
-
     <canvas id="animus-canvas"></canvas>
-    <canvas id="confetti-canvas"></canvas>
-
     <div class="animus-card">
-        <div class="animus-corner top-left"></div>
-        <div class="animus-corner bottom-right"></div>
-
         <div class="header">
-            <div class="badge">⚔️ ABSTERGO ANIMUS 3.0</div>
-            <h1>SYSTEM MATRIX</h1>
-            <p>Синхронизация генетической памяти лица</p>
+            <h1>BLOOD SYSTEM</h1>
+            <p>Векторная система оценки пропорций лица</p>
         </div>
-
         {% if not data %}
-        <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">💠</div>
-            <div class="upload-title">Загрузить объект</div>
-            <div class="upload-subtitle">Выберите портретный файл для инициализации матрицы</div>
+        <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size: 2.5rem; margin-bottom: 10px;">🩸</div>
+            <div style="font-family: 'Orbitron', sans-serif; font-weight: 800;">Загрузить объект</div>
             <div class="btn-animus">Инициация</div>
             <input type="file" id="fileInput" accept="image/*" onchange="uploadPhoto(this)">
         </div>
-
-        <div class="loader-screen" id="loaderScreen">
-            <div class="laser-loader">
-                <div class="laser-line"></div>
-            </div>
-            <div class="loader-text">Синхронизация с последовательностью ДНК...</div>
-        </div>
         {% endif %}
-
         <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
             <div class="photo-container">
-                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Animus Scan">
+                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Scan">
             </div>
-
-            <div class="gauge-box">
-                <svg viewBox="0 0 200 200">
-                    <circle class="gauge-bg-track" cx="100" cy="100" r="90"></circle>
-                    <circle class="gauge-fill-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
-                </svg>
-                <div class="gauge-center">
-                    <div class="score-num" id="scoreNum">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
-                    <div class="score-lbl">Индекс DNA</div>
-                </div>
+            <div style="font-family: 'Orbitron', sans-serif; font-size: 2.5rem; font-weight: 900;">
+                {% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %} / 10
             </div>
-
-            <div class="category-badge {% if data %}{{ data.cat_class }}{% endif %}">
-                {% if data %}{{ data.category }}{% endif %}
-            </div>
-
-            {% if data %}
-            <div class="metrics-card">
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Симметрия овала</span>
-                        <span class="metric-value">{{ data.details.symmetry }}%</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="symBar"></div>
-                    </div>
-                </div>
-
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Четкость геометрии</span>
-                        <span class="metric-value">{{ data.details.sharpness }}/10.0</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="sharpBar"></div>
-                    </div>
-                </div>
-
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Спектральный тон</span>
-                        <span class="metric-value">{{ data.details.harmony }}/10.0</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="harmBar"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="report-box">
-                <div class="report-card">
-                    <div class="report-title title-pros">🔥 Генетические плюсы</div>
-                    <div class="report-text">{{ data.report.pros }}</div>
-                </div>
-                <div class="report-card">
-                    <div class="report-title title-cons">❌ Дессинхронизация</div>
-                    <div class="report-text">{{ data.report.cons }}</div>
-                </div>
-                <div class="report-card">
-                    <div class="report-title title-recs">💡 Инструкция по прокачке</div>
-                    <div class="report-text">{{ data.report.recs }}</div>
-                </div>
-            </div>
-            {% endif %}
-
-            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
+            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс</button>
         </div>
     </div>
-
     <script>
-        let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
+        let tgUser = { id: 0, name: 'Объект', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.ready();
-            window.Telegram.WebApp.expand();
             if (window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
                 const u = window.Telegram.WebApp.initDataUnsafe.user;
-                tgUser.id = u.id || 0;
-                tgUser.name = (u.first_name || '') + ' ' + (u.last_name || '');
-                tgUser.username = u.username || '';
+                tgUser.id = u.id || 0; tgUser.name = u.first_name || ''; tgUser.username = u.username || '';
             }
         }
-
-        const canvas = document.getElementById('animus-canvas');
-        const ctx = canvas.getContext('2d');
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        let animusLines = [];
-        for (let i = 0; i < 35; i++) {
-            animusLines.push({
-                x: Math.random() * canvas.width,
-                length: Math.random() * 200 + 80,
-                speed: Math.random() * 4 + 1.5,
-                width: Math.random() * 2 + 0.5,
-                opacity: Math.random() * 0.4 + 0.1
-            });
-        }
-
-        let memoryParticles = [];
-        for (let i = 0; i < 60; i++) {
-            memoryParticles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                size: Math.random() * 3 + 1,
-                vx: (Math.random() - 0.5) * 0.5,
-                vy: -Math.random() * 1.5 - 0.5,
-                alpha: Math.random() * 0.6 + 0.2
-            });
-        }
-
-        let gridOffset = 0;
-
-        function renderAnimusMatrix() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            gridOffset += 0.4;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-            ctx.lineWidth = 1;
-
-            const gridSize = 40;
-            for (let x = 0; x < canvas.width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
-            }
-            for (let y = (gridOffset % gridSize); y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
-            }
-
-            animusLines.forEach(l => {
-                l.x += l.speed;
-                if (l.x > canvas.width + l.length) l.x = -l.length;
-
-                ctx.strokeStyle = `rgba(255, 255, 255, ${l.opacity})`;
-                ctx.lineWidth = l.width;
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 10;
-                ctx.beginPath();
-                ctx.moveTo(l.x - l.length, canvas.height / 2 + (l.width * 50));
-                ctx.lineTo(l.x, canvas.height / 2 + (l.width * 50));
-                ctx.stroke();
-            });
-
-            memoryParticles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                if (p.y < 0) p.y = canvas.height;
-                if (p.x < 0) p.x = canvas.width;
-                if (p.x > canvas.width) p.x = 0;
-
-                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 6;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            ctx.shadowBlur = 0;
-            requestAnimationFrame(renderAnimusMatrix);
-        }
-        renderAnimusMatrix();
-
-        function playAnimusSound() {
-            try {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (!AudioCtx) return;
-                const actx = new AudioCtx();
-                const osc = actx.createOscillator();
-                const gain = actx.createGain();
-
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(120, actx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(440, actx.currentTime + 0.4);
-
-                gain.gain.setValueAtTime(0.15, actx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.4);
-
-                osc.connect(gain);
-                gain.connect(actx.destination);
-                osc.start();
-                osc.stop(actx.currentTime + 0.4);
-            } catch (e) {}
-        }
-
         async function uploadPhoto(input) {
             if (!input.files || !input.files[0]) return;
-            playAnimusSound();
-            document.getElementById('uploadBox').style.display = 'none';
-            document.getElementById('loaderScreen').style.display = 'block';
-
             const formData = new FormData();
             formData.append('file', input.files[0]);
             formData.append('user_id', tgUser.id);
             formData.append('user_name', tgUser.name);
             formData.append('user_username', tgUser.username);
-
-            try {
-                const response = await fetch('/analyze', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.id) window.location.href = '/result/' + data.id;
-            } catch (err) {
-                alert('Десинхронизация с сервером');
-                location.reload();
-            }
+            const response = await fetch('/analyze', { method: 'POST', body: formData });
+            const data = await response.json();
+            if (data.id) window.location.href = '/result/' + data.id;
         }
-
-        {% if data %}
-        const rating = {{ data.rating }};
-        const gaugeBar = document.getElementById('gaugeBar');
-        const scoreNum = document.getElementById('scoreNum');
-
-        gaugeBar.style.stroke = "{{ data.color_hex }}";
-        const offset = (2 * Math.PI * 90) - (rating / 10.0) * (2 * Math.PI * 90);
-
-        setTimeout(() => {
-            gaugeBar.style.strokeDashoffset = offset;
-            document.getElementById('symBar').style.width = "{{ data.details.symmetry }}%";
-            document.getElementById('sharpBar').style.width = "{{ (data.details.sharpness * 10.0) }}%";
-            document.getElementById('harmBar').style.width = "{{ (data.details.harmony * 10.0) }}%";
-        }, 150);
-
-        let cur = 0.0;
-        const step = rating / 40.0;
-        const t = setInterval(() => {
-            cur += step;
-            if (cur >= rating) {
-                scoreNum.innerText = rating.toFixed(1);
-                clearInterval(t);
-            } else {
-                scoreNum.innerText = cur.toFixed(1);
-            }
-        }, 30);
-        {% endif %}
     </script>
 </body>
 </html>
 """
 
 # ==============================================================================
-# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ)
+# 🛰 FLASK ROUTES
 # ==============================================================================
 @app.route('/')
 def home():
@@ -1168,13 +731,12 @@ def home():
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file"}), 400
+    if 'file' not in request.files: return jsonify({"error": "No file"}), 400
     file = request.files['file']
 
     user_id_str = request.form.get('user_id', '0')
     user_id = int(user_id_str) if user_id_str.isdigit() else 0
-    user_name = request.form.get('user_name', 'Объект Анимуса')
+    user_name = request.form.get('user_name', 'Объект')
     user_username = request.form.get('user_username', '')
 
     unique_id = f"{uuid.uuid4().hex}_{int(time.time())}"
@@ -1203,8 +765,6 @@ def analyze():
 
     threading.Thread(target=save_db_async, daemon=True).start()
 
-    logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
-
     if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
         def send_admin_photo_async():
             try:
@@ -1213,18 +773,18 @@ def analyze():
                 async def _send():
                     bot_admin = Bot(token=BOT_TOKEN)
                     admin_caption = (
-                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
+                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В BLOOD (САЙТ)!**\n\n"
                         f"👤 **Имя:** {user_name}\n"
                         f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
                         f"🆔 **ID:** `{user_id}`\n"
-                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
+                        f"🧠 **DeepSeek Оценка:** `{rating}/10` ({category})"
                     )
                     photo_file = FSInputFile(filepath)
                     await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
                     await bot_admin.session.close()
                 loop.run_until_complete(_send())
             except Exception as e:
-                logger.error(f"Ошибка отправки фото админу с сайта: {e}")
+                logger.error(f"Ошибка отправки фото админу: {e}")
 
         threading.Thread(target=send_admin_photo_async, daemon=True).start()
 
@@ -1235,7 +795,7 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск бота в фоновом потоке
+# Запуск телеграм-бота в отдельном фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
