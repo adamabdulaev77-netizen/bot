@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — STABLE PRODUCTION EDITION
+# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — REQUESTS EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -10,6 +10,7 @@
 # aiogram>=3.0.0
 # aiosqlite>=0.19.0
 # aiohttp>=3.8.0
+# requests>=2.31.0
 # ==============================================================================
 
 import os
@@ -21,8 +22,7 @@ import json
 import logging
 import threading
 import asyncio
-import urllib.request
-import urllib.parse
+import requests
 import cv2
 import numpy as np
 import aiosqlite
@@ -44,19 +44,18 @@ from aiogram.types import (
     FSInputFile
 )
 from aiogram.fsm.storage.memory import MemoryStorage
-import aiohttp
 
 # ==============================================================================
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
 # ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 
-# ⚠️ ВСТАВЬ СЮДА СВОЙ TELEGRAM ID
+# ⚠️ Твой Telegram ID
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
 # Обновленный API Ключ DeepSeek
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "sk-a60a2335b9744146ad9f13c2dedba372")
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
@@ -75,7 +74,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("BloodEnterpriseEngine")
+logger = logging.getLogger("BloodRequestsEngine")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -235,111 +234,67 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 DEEPSEEK AI AGENT (ОЦЕНКА ФОТО И ДИАЛОГ)
+# 🧠 DEEPSEEK API ЧЕРЕЗ REQUESTS (ТАК, КАК ТЫ ПРОСИЛ)
 # ==============================================================================
-async def get_deepseek_chat_response(user_text: str) -> str:
-    """Диалоговый ИИ-агент для общения с пользователями"""
-    async with aiohttp.ClientSession() as session:
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        system_prompt = (
-            "Ты — официальный ИИ-агент сервиса 'Blood'. "
-            "Ты эксперт по эстетике лица, векторному анализу, спорту, стилю и уходу за собой. "
-            "Отвечай пользователям прямо, уверенно, лаконично и по делу. "
-            "Используй форматирование Markdown."
-        )
-        payload = {
-            "model": "deepseek-chat",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_text}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 700
-        }
-        try:
-            async with session.post(DEEPSEEK_API_URL, headers=headers, json=payload, timeout=12) as response:
-                res_text = await response.text()
-                if response.status == 200:
-                    res_data = json.loads(res_text)
-                    return res_data['choices'][0]['message']['content'].strip()
-                else:
-                    logger.error(f"DeepSeek API Chat Error Code {response.status}: {res_text}")
-                    if response.status == 402 or "insufficient_balance" in res_text.lower():
-                        return "⚠️ **Ошибка:** На балансе DeepSeek API закончились средства."
-                    elif response.status == 401:
-                        return "⚠️ **Ошибка:** Неверный API-ключ DeepSeek."
-                    else:
-                        return f"⚠️ **Ошибка API ({response.status}):** Сервер нейросети недоступен."
-        except Exception as e:
-            logger.error(f"Ошибка вызова DeepSeek Chat API: {e}")
-        return "⚠️ Произошла временная ошибка связи с нейросетью. Попробуй написать чуть позже!"
+def ask_deepseek_ai(prompt: str, system_prompt: str = "") -> str:
+    """Универсальная функция вызова DeepSeek AI через requests.post"""
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+
+    data = {
+        "model": "deepseek-chat",
+        "messages": messages,
+        "temperature": 0.7
+    }
+
+    try:
+        r = requests.post(DEEPSEEK_API_URL, json=data, headers=headers, timeout=12)
+        if r.status_code == 200:
+            res_json = r.json()
+            return res_json["choices"][0]["message"]["content"].strip()
+        else:
+            logger.error(f"DeepSeek API Error [{r.status_code}]: {r.text}")
+            if r.status_code == 402:
+                return "⚠️ Ошибка: На аккаунте DeepSeek закончились средства."
+            return f"⚠️ Ошибка API DeepSeek ({r.status_code})."
+    except Exception as e:
+        logger.error(f"Ошибка вызова requests.post DeepSeek: {e}")
+        return "⚠️ Произошла ошибка при вызове нейросети."
 
 def analyze_with_deepseek(sym_pct: float, sharp_score: float, harm_score: float):
-    """Оценка векторов кадра через urllib.request"""
+    """Оценка векторов кадра нейросетью DeepSeek"""
     system_prompt = (
         "Ты — строгий, бескомпромиссный и объективный ИИ-эксперт по векторному анализу лиц на сервисе Blood. "
         "Твоя задача — давать 100% честную оценку внешности без лести. "
         "Оценивай человека по шкале от 1.0 до 10.0 с точностью до десятых. "
-        "Шкала категорий:\n"
-        "1.0 - 2.9: SUB 3\n"
-        "3.0 - 4.9: SUB 5\n"
-        "5.0 - 5.9: LTN (Low Tier Normal)\n"
-        "6.0 - 6.9: MTN (Mid Tier Normal)\n"
-        "7.0 - 7.9: HTN (High Tier Normal)\n"
-        "8.0 - 9.9: CHAD\n"
-        "10.0: TRUE ADAM\n\n"
-        "ВАЖНО: Верни ответ СТРОГО в формате JSON без разметки markdown, со структурой:\n"
-        "{\n"
-        '  "rating": 6.4,\n'
-        '  "category": "MTN",\n'
-        '  "pros": "Честное описание сильных сторон (1-2 предложения)",\n'
-        '  "cons": "Честное описание слабых сторон или недостатков (1-2 предложения)",\n'
-        '  "recs": "Конкретные практические советы по луксмаксингу и уходу (2-3 предложения)"\n'
-        "}"
+        "Категории:\n1.0-2.9: SUB 3 | 3.0-4.9: SUB 5 | 5.0-5.9: LTN | 6.0-6.9: MTN | 7.0-7.9: HTN | 8.0-9.9: CHAD | 10.0: TRUE ADAM\n\n"
+        "ВАЖНО: Верни ответ СТРОГО в формате JSON без разметки markdown:\n"
+        '{"rating": 6.4, "category": "MTN", "pros": "Плюсы...", "cons": "Минусы...", "recs": "Советы..."}'
     )
 
-    user_prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
+    prompt = f"Векторы кадра: Симметрия={sym_pct}%, Четкость={sharp_score}/10, Цветовой тон={harm_score}/10."
 
-    payload = json.dumps({
-        "model": "deepseek-chat",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 500
-    }).encode('utf-8')
-
-    req = urllib.request.Request(
-        DEEPSEEK_API_URL,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        method="POST"
-    )
-
+    response_text = ask_deepseek_ai(prompt, system_prompt)
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status == 200:
-                res_data = json.loads(response.read().decode('utf-8'))
-                content = res_data['choices'][0]['message']['content'].strip()
-                if content.startswith("```json"): content = content[7:]
-                if content.endswith("```"): content = content[:-3]
-                ai_json = json.loads(content.strip())
-                return (
-                    float(ai_json.get("rating", 5.5)),
-                    str(ai_json.get("category", "LTN")),
-                    str(ai_json.get("pros", "Базовая симметрия овала.")),
-                    str(ai_json.get("cons", "Сглаженная линия челюсти.")),
-                    str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
-                )
-    except Exception as e:
-        logger.error(f"Ошибка при вызове DeepSeek Scoring: {e}")
+        if response_text.startswith("```json"): response_text = response_text[7:]
+        if response_text.endswith("```"): response_text = response_text[:-3]
+        ai_json = json.loads(response_text.strip())
+        return (
+            float(ai_json.get("rating", 5.5)),
+            str(ai_json.get("category", "LTN")),
+            str(ai_json.get("pros", "Базовая симметрия овала.")),
+            str(ai_json.get("cons", "Сглаженная линия челюсти.")),
+            str(ai_json.get("recs", "Снижай процент подкожного жира и держи осанку."))
+        )
+    except Exception:
+        pass
 
     raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
     rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
@@ -628,22 +583,33 @@ async def handle_ai_chat_message(message: Message):
         return
 
     status_msg = await message.answer("💬 *ИИ-агент Blood обдумывает ответ...*", parse_mode="Markdown")
-    ai_reply = await get_deepseek_chat_response(message.text)
+    
+    # Вызов DeepSeek в фоновом потоке
+    loop = asyncio.get_event_loop()
+    sys_prompt = "Ты — ИИ-агент сервиса Blood. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо и дружелюбно."
+    ai_reply = await loop.run_in_executor(None, ask_deepseek_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
 
+bot_thread_started = False
+
 def start_telegram_bot():
+    global bot_thread_started
+    if bot_thread_started:
+        return
+    bot_thread_started = True
+
     async def bot_worker():
         await db.init_db()
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
-        logger.info("Телеграм-бот с ИИ-агентом запущен.")
+        logger.info("Телеграм-бот с ИИ-агентом успешно запущен.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
-            logger.error(f"Ошибка в работе polling: {e}")
+            logger.error(f"Ошибка в работы polling: {e}")
         finally:
             await bot.session.close()
 
