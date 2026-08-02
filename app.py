@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — BLOOD GEMINI EDITION (STABLE SINGLE-FILE)
+# 🌐 BLOOD AI ENGINE & TELEGRAM AGENT — STABLE AQ-KEY EDITION
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -44,7 +44,6 @@ from aiogram.types import (
     FSInputFile
 )
 from aiogram.fsm.storage.memory import MemoryStorage
-import aiohttp
 
 # ==============================================================================
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
@@ -54,8 +53,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT
 # ⚠️ Твой Telegram ID
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
-# Твой новый ключ Gemini API
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6LJXgWULfWUdBCwW6qPelpyaAvanImlk3kUuEZgyID8Mg")
+# Твой проверенный ключ Gemini API
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6L_d7mlMG6Ll2-AOcYpYu3uaYdo-UgibXswSuwp7dKBug")
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
 
@@ -74,7 +73,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("BloodGeminiEnterprise")
+logger = logging.getLogger("BloodEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -234,36 +233,43 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 БЕСПЛАТНЫЙ GEMINI AI ДВИЖОК
+# 🧠 УНИВЕРСАЛЬНЫЙ GEMINI AI ДВИЖОК ПОД КЛЮЧИ AQ...
 # ==============================================================================
 def ask_gemini_ai(prompt: str, system_instruction: str = "") -> str:
-    """Адаптированный вызов Gemini API"""
-    clean_key = GEMINI_API_KEY.replace(" ", "").strip()
-    
-    # Модели с авто-фоллбеком
-    models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-    headers = {"Content-Type": "application/json"}
+    key = GEMINI_API_KEY.strip()
     
     contents = []
     if system_instruction:
         contents.append({"role": "user", "parts": [{"text": f"Инструкция: {system_instruction}"}]})
     contents.append({"role": "user", "parts": [{"text": prompt}]})
-
     data = {"contents": contents}
 
-    for model in models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={clean_key}"
-        try:
-            r = requests.post(url, json=data, headers=headers, timeout=10)
-            if r.status_code == 200:
-                res_json = r.json()
-                return res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-            else:
-                logger.warning(f"Gemini API model {model} status [{r.status_code}]: {r.text[:200]}")
-        except Exception as e:
-            logger.error(f"Ошибка запроса к {model}: {e}")
+    # Вариант 1: Запрос с Authorization Bearer Header (стандарт для ключей AQ...)
+    try:
+        url_bearer = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers_bearer = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}"
+        }
+        r1 = requests.post(url_bearer, json=data, headers=headers_bearer, timeout=8)
+        if r1.status_code == 200:
+            return r1.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        logger.error(f"Bearer attempt failed: {e}")
 
-    return "⚠️ Произошла временная ошибка связи с нейросетью. Попробуй чуть позже!"
+    # Вариант 2: Запрос через параметр URL ?key=
+    try:
+        url_key = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+        headers_plain = {"Content-Type": "application/json"}
+        r2 = requests.post(url_key, json=data, headers=headers_plain, timeout=8)
+        if r2.status_code == 200:
+            return r2.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+        else:
+            logger.error(f"Param key attempt failed [{r2.status_code}]: {r2.text[:150]}")
+    except Exception as e:
+        logger.error(f"Param key attempt error: {e}")
+
+    return "⚠️ Произошла ошибка связи с нейросетью."
 
 def analyze_with_gemini(sym_pct: float, sharp_score: float, harm_score: float):
     system_prompt = (
@@ -333,7 +339,7 @@ def analyze_opencv(image_path: str):
     return rating, cat, cat_cls, color, details, report
 
 # ==============================================================================
-# 🤖 TELEGRAM BOT ROUTER & HANDLERS (AIOGRAM 3.X)
+# 🤖 TELEGRAM BOT ROUTER & HANDLERS
 # ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
@@ -598,7 +604,7 @@ def start_telegram_bot():
         bot = Bot(token=BOT_TOKEN)
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
-        logger.info("Телеграм-бот с Gemini AI успешно запущен.")
+        logger.info("Телеграм-бот с Gemini AI запущен.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
@@ -873,7 +879,6 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск бота в отдельном фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
