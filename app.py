@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX EDITION (GROQ LLAMA 3.3)
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX ULTIMATE EDITION (GROQ + VOICE + GENDER)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -11,6 +11,7 @@
 # aiosqlite>=0.19.0
 # aiohttp>=3.8.0
 # requests>=2.31.0
+# gTTS>=2.5.0
 # ==============================================================================
 
 import os
@@ -29,7 +30,7 @@ import aiosqlite
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, send_from_directory
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart, Command
@@ -44,7 +45,14 @@ from aiogram.types import (
     FSInputFile
 )
 from aiogram.fsm.storage.memory import MemoryStorage
-import aiohttp
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+try:
+    from gtts import gTTS
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
 
 # ==============================================================================
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
@@ -60,10 +68,12 @@ RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:50
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 PHOTOS_DIR = "all_user_photos"
+VOICE_DIR = os.path.join('static', 'voice')
 DB_PATH = "bot_database.db"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PHOTOS_DIR, exist_ok=True)
+os.makedirs(VOICE_DIR, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -77,6 +87,11 @@ logger = logging.getLogger("AnimusMatrixEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
+
+# Состояния FSM для выбора пола перед сканированием
+class ScanStates(StatesGroup):
+    waiting_for_gender = State()
+    waiting_for_photo = State()
 
 # ==============================================================================
 # 🗄 МОДУЛЬ БАЗЫ ДАННЫХ (AIOSQLITE ENGINE)
@@ -103,6 +118,7 @@ class DatabaseManager:
                     user_id INTEGER,
                     rating REAL,
                     category TEXT,
+                    gender TEXT DEFAULT 'male',
                     photo_path TEXT,
                     source TEXT DEFAULT 'bot',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -131,12 +147,12 @@ class DatabaseManager:
             """, (user_id, username or "", first_name or "Пользователь"))
             await db.commit()
 
-    async def add_scan(self, scan_id: str, user_id: int, rating: float, category: str, photo_path: str, source: str = "bot"):
+    async def add_scan(self, scan_id: str, user_id: int, rating: float, category: str, gender: str, photo_path: str, source: str = "bot"):
         async with aiosqlite.connect(self.db_file) as db:
             await db.execute("""
-                INSERT INTO scans (id, user_id, rating, category, photo_path, source)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (scan_id, user_id, rating, category, photo_path, source))
+                INSERT INTO scans (id, user_id, rating, category, gender, photo_path, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (scan_id, user_id, rating, category, gender, photo_path, source))
             await db.execute("UPDATE users SET scans_count = scans_count + 1 WHERE user_id = ?", (user_id,))
             await db.commit()
 
@@ -169,7 +185,7 @@ class DatabaseManager:
     async def get_recent_scans_log(self, limit: int = 10) -> List[Dict[str, Any]]:
         async with aiosqlite.connect(self.db_file) as db:
             query = """
-                SELECT s.id, s.user_id, s.rating, s.category, s.source, s.created_at, u.username, u.first_name, s.photo_path
+                SELECT s.id, s.user_id, s.rating, s.category, s.gender, s.source, s.created_at, u.username, u.first_name, s.photo_path
                 FROM scans s
                 LEFT JOIN users u ON s.user_id = u.user_id
                 ORDER BY s.created_at DESC
@@ -184,11 +200,12 @@ class DatabaseManager:
                         "user_id": r[1],
                         "rating": r[2],
                         "category": r[3],
-                        "source": r[4],
-                        "created_at": r[5],
-                        "username": r[6] or "нет",
-                        "first_name": r[7] or "Гость",
-                        "photo_path": r[8]
+                        "gender": r[4] or "male",
+                        "source": r[5],
+                        "created_at": r[6],
+                        "username": r[7] or "нет",
+                        "first_name": r[8] or "Гость",
+                        "photo_path": r[9]
                     })
                 return logs
 
@@ -233,7 +250,29 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🧠 GROQ AI ДВИЖОК (ОБЩЕНИЕ И ОЦЕНКА)
+# 🎙 СИНТЕЗ ГОЛОСОВЫХ СООБЩЕНИЙ (TTS ENGINE)
+# ==============================================================================
+def create_voice_note(text: str) -> Optional[str]:
+    """Генерация голосового файла mp3"""
+    if not TTS_AVAILABLE:
+        return None
+    try:
+        clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '')
+        if len(clean_text) > 450:
+            clean_text = clean_text[:450] + "..."
+        
+        filename = f"voice_{uuid.uuid4().hex[:8]}.mp3"
+        filepath = os.path.join(VOICE_DIR, filename)
+        
+        tts = gTTS(text=clean_text, lang='ru', slow=False)
+        tts.save(filepath)
+        return filepath
+    except Exception as e:
+        logger.error(f"Ошибка создания голосового сообщения: {e}")
+        return None
+
+# ==============================================================================
+# 🧠 GROQ AI ДВИЖОК (ГЛУБОКИЙ АНАЛИЗ И ЧАТ)
 # ==============================================================================
 def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
     headers = {
@@ -255,7 +294,7 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
             "temperature": 0.7
         }
         try:
-            r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=10)
+            r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=12)
             if r.status_code == 200:
                 res_json = r.json()
                 return res_json["choices"][0]["message"]["content"].strip()
@@ -266,30 +305,60 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
 
     return "⚠️ Произошла ошибка связи с нейросетью."
 
-def generate_looksmaxing_report(rating: float, sym_pct: float, sharp_val: float, harm_val: float) -> Dict[str, str]:
-    if rating >= 8.5:
-        pros = f"Синхронизация с идеальной моделью Анимуса ({sym_pct}%). Идеально очерченная челюстная дуга, высокий индекс четкости контуров ({sharp_val}/10.0)."
-        cons = "Минорные недочеты в распределении цифрового освещения кадра."
-        recs = "Поддерживай процент жира в организме в пределах 10-12%. Соблюдай питьевой режим и сохраняй осанку (мьюинг)."
-    elif rating >= 7.0:
-        pros = f"Высокий гармонический потенциал структуры лица. Симметрия овала составляет {sym_pct}%."
-        cons = f"Легкий асимметричный сдвиг в области подбородка. Индекс резкости: {sharp_val}/10.0."
-        recs = "Сфокусируйся на снижении процента подкожного жира для максимального выделения скуловых костей."
-    elif rating >= 5.5:
-        pros = f"Удовлетворительный овал лица с коэффициентом цветовой гармонии {harm_val}/10.0. Симметрия: {sym_pct}%."
-        cons = f"Сглаженная линия челюсти, сниженная резкость деталей ({sharp_val}/10.0)."
-        recs = "Оптимизируй рацион для борьбы с отекшим овалом лица, делай массаж Гуаша, исправь осанку."
-    else:
-        pros = f"Базовый баланс цветовой гаммы кадра ({harm_val}/10.0)."
-        cons = f"Заметная асимметрия овала ({sym_pct}%). Низкий индекс контурной резкости ({sharp_val}/10.0)."
-        recs = "Начни комплексную трансформацию: дефаттинг (снижение жира), силовые тренировки, исправление осанки."
+def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float, gender: str = "male"):
+    gender_title = "МУЖЧИНА" if gender == "male" else "ЖЕНЩИНА"
+    
+    system_prompt = (
+        f"Ты — главный ИИ-эксперт сервиса Animus Matrix по биометрическому разбору лиц, Золотому Сечению и луксмаксингу. "
+        f"Объект анализа: {gender_title}.\n"
+        "Оценивай внешность строго, беспристрастно по шкале от 1.0 до 10.0.\n"
+        f"{'Акцент при анализе мужчины: угол челюсти, ширина подбородка, кантальный тильт, маскулинная резкость и пропорция третей.' if gender == 'male' else 'Акцент при анализе женщины: мягкость овала, пропорции губ и скул, гладкость кожи, симметрия глаз и эстетический баланс.'}\n\n"
+        "Верни ответ СТРОГО в формате JSON без markdown разметки:\n"
+        '{\n'
+        '  "rating": 7.2,\n'
+        '  "category": "HTN",\n'
+        '  "pros": "1. Высокая симметрия овала лица (88%).\\n2. Четко выраженная дуга челюсти.\\n3. Отличный цветовой баланс и контраст кадра.",\n'
+        '  "cons": "1. Легкая асимметрия в области подбородка.\\n2. Сглаженная резкость в средней третьей части лица.\\n3. Небольшие отеки под глазами.",\n'
+        '  "recs": "1. ДЕФАТТИНГ: Снизь процент жира в организме до 11-13% для максимального рельефа скул.\\n2. МЬЮИНГ И ОСАНКА: Сохраняй правильное положение языка у нёба и держи плечевой пояс.\\n3. УХОД ЗА КОЖЕЙ: Включи гиалуроновую кислоту и салициловый тоник от микроотеков.\\n4. ПРИЧЕСКА: Подбери объемную стрижку под форму овала.",\n'
+        '  "potential": "8.7 (CHAD)"\n'
+        '}'
+    )
 
-    return {"pros": pros, "cons": cons, "recs": recs}
+    prompt = f"Векторные данные кадра: Симметрия овала={sym_pct}%, Индекс контурной четкости={sharp_score}/10, Цветовой тон={harm_score}/10. Пол={gender_title}."
 
-def analyze_opencv(image_path: str):
+    response_text = ask_groq_ai(prompt, system_prompt)
+    try:
+        if response_text.startswith("```json"): response_text = response_text[7:]
+        if response_text.endswith("```"): response_text = response_text[:-3]
+        ai_json = json.loads(response_text.strip())
+        return (
+            float(ai_json.get("rating", 6.0)),
+            str(ai_json.get("category", "MTN")),
+            str(ai_json.get("pros", "1. Базовая симметрия овала.\n2. Удовлетворительный баланс пропорций.")),
+            str(ai_json.get("cons", "1. Сглаженная линия челюсти.\n2. Недостаточный рельеф скуловых костей.")),
+            str(ai_json.get("recs", "1. Снижай процент подкожного жира.\n2. Держи осанку и выполняй мьюинг.")),
+            str(ai_json.get("potential", "8.0 (CHAD)"))
+        )
+    except Exception:
+        pass
+
+    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
+    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
+    cat = "MTN" if rating >= 6.0 else "LTN"
+    
+    pros = f"1. Высокая симметрия овала ({sym_pct}%).\n2. Хороший цветовой баланс ({harm_score}/10)."
+    cons = f"1. Сглаженная резкость деталей ({sharp_score}/10).\n2. Недостаточная выраженность скул."
+    recs = "1. Снижай процент подкожного жира.\n2. Делай массаж Гуаша и исправь осанку."
+    pot = f"{min(10.0, rating + 1.5):.1f} (HTN/CHAD)"
+
+    return rating, cat, pros, cons, recs, pot
+
+def analyze_opencv(image_path: str, gender: str = "male"):
     img = cv2.imread(image_path)
     if img is None:
-        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, generate_looksmaxing_report(5.0, 50.0, 5.0, 5.0)
+        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, {
+            "pros": "1. Базовый баланс кадра.", "cons": "1. Не удалось прочитать детали кадра.", "recs": "1. Сделайте более четкий снимок.", "potential": "7.0 (MTN)"
+        }
 
     h, w = img.shape[:2]
     max_dim = 800
@@ -313,19 +382,18 @@ def analyze_opencv(image_path: str):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     harm_score = round(min(10.0, max(1.0, (np.mean(hsv[:, :, 1]) / 25.5) * 0.5 + (np.mean(hsv[:, :, 2]) / 25.5) * 0.5)), 1)
 
-    raw_score = ((sym_pct / 10.0) * 0.50) + (sharp_score * 0.30) + (harm_score * 0.20)
-    rating = round(float(np.clip(raw_score, 1.0, 10.0)), 1)
+    rating, cat, pros, cons, recs, potential = analyze_with_groq_deep(sym_pct, sharp_score, harm_score, gender)
 
-    if rating < 3.0: cat, cat_cls, color = "SUB 3", "cat-SUB3", "#ff3333"
-    elif rating < 5.0: cat, cat_cls, color = "SUB 5", "cat-SUB5", "#ff8833"
-    elif rating < 6.0: cat, cat_cls, color = "LTN", "cat-LTN", "#e6e6e6"
-    elif rating < 7.0: cat, cat_cls, color = "MTN", "cat-MTN", "#cccccc"
-    elif rating < 8.0: cat, cat_cls, color = "HTN", "cat-HTN", "#ffffff"
-    elif rating < 10.0: cat, cat_cls, color = "CHAD", "cat-CHAD", "#00e5ff"
-    else: cat, cat_cls, color = "TRUE ADAM", "cat-TRUE_ADAM", "#ffd700"
+    if rating < 3.0: cat_cls, color = "cat-SUB3", "#ff3333"
+    elif rating < 5.0: cat_cls, color = "cat-SUB5", "#ff8833"
+    elif rating < 6.0: cat_cls, color = "cat-LTN", "#e6e6e6"
+    elif rating < 7.0: cat_cls, color = "cat-MTN", "#cccccc"
+    elif rating < 8.0: cat_cls, color = "cat-HTN", "#ffffff"
+    elif rating < 10.0: cat_cls, color = "cat-CHAD", "#00e5ff"
+    else: cat_cls, color = "cat-TRUE_ADAM", "#ffd700"
 
     details = {"symmetry": sym_pct, "sharpness": sharp_score, "harmony": harm_score}
-    report = generate_looksmaxing_report(rating, sym_pct, sharp_score, harm_score)
+    report = {"pros": pros, "cons": cons, "recs": recs, "potential": potential}
 
     return rating, cat, cat_cls, color, details, report
 
@@ -343,6 +411,13 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
+def get_gender_inline_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton(text="🚹 Мужской анализ", callback_data="gender_male")],
+        [InlineKeyboardButton(text="🚺 Женский анализ", callback_data="gender_female")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="📸 Фотки", callback_data="admin_photos"), InlineKeyboardButton(text="💬 Чаты", callback_data="admin_chats")],
@@ -350,24 +425,28 @@ def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def get_result_inline_keyboard(result_id: str) -> InlineKeyboardMarkup:
+def get_result_inline_keyboard(result_id: str, rating: float, category: str) -> InlineKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     web_app_url = f"{server_url}/result/{result_id}"
+    share_text = f"🔥 Мой генетический индекс внешности в Animus Matrix: {rating}/10 ({category})! Проверь себя:"
+    share_url = f"https://t.me/share/url?url={web_app_url}&text={requests.utils.quote(share_text)}"
+
     buttons = [
-        [InlineKeyboardButton(text="📱 Открыть результат в WebApp", web_app=WebAppInfo(url=web_app_url))],
-        [InlineKeyboardButton(text="🔗 Ссылка для браузера", url=web_app_url)]
+        [InlineKeyboardButton(text="📱 Открыть подробную карточку", web_app=WebAppInfo(url=web_app_url))],
+        [InlineKeyboardButton(text="📲 Поделиться результатом", url=share_url)]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 router = Router()
 
 @router.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, state: FSMContext):
+    await state.clear()
     await db.register_user(message.from_user.id, message.from_user.username or "", message.from_user.first_name)
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
         "🔥 Я — ИИ-агент по векторному анализу привлекательности, пропорций и геометрии лица.\n\n"
-        "📸 **Отправь мне фото в чат** для оценки или **напиши любой вопрос**, чтобы пообщаться со мной! 👇"
+        "📸 **Нажми «📸 Проверить лицо»** или **задай любой вопрос** прямо в чат! 👇"
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
@@ -388,8 +467,25 @@ async def cmd_start(message: Message):
     await message.answer(text=welcome_text, parse_mode="Markdown", reply_markup=kb)
 
 @router.message(F.text == "📸 Проверить лицо")
-async def btn_scan_info(message: Message):
-    await message.answer("📸 Жду твое фото! Отправь его прямо в этот чат.")
+async def btn_scan_info(message: Message, state: FSMContext):
+    await state.set_state(ScanStates.waiting_for_gender)
+    await message.answer(
+        "🧬 **Выберите пол объекта для настройки стандартов пропорций:**",
+        reply_markup=get_gender_inline_keyboard()
+    )
+
+@router.callback_query(F.data.startswith("gender_"))
+async def callback_select_gender(call: CallbackQuery, state: FSMContext):
+    selected_gender = "male" if call.data == "gender_male" else "female"
+    await state.update_data(gender=selected_gender)
+    await state.set_state(ScanStates.waiting_for_photo)
+    
+    gender_str = "Мужской" if selected_gender == "male" else "Женский"
+    await call.message.edit_text(
+        f"✅ Выбран пол: **{gender_str}**.\n\n"
+        "📸 **Отправьте портретное фото в чат** для получения глубокого разбора."
+    )
+    await call.answer()
 
 @router.message(F.text == "📊 Мой профиль")
 async def btn_profile(message: Message):
@@ -510,8 +606,12 @@ async def callback_admin_chats(call: CallbackQuery):
     await call.message.answer("💬 **Выше приведена выгрузка последних диалогов.**", reply_markup=get_admin_inline_keyboard())
     await call.answer()
 
-async def process_photo_message(message: Message, file_id: str):
-    status_msg = await message.reply("🔄 **[1/3] ИИ загружает фото в Анимус...**", parse_mode="Markdown")
+async def process_photo_message(message: Message, file_id: str, state: FSMContext):
+    user_data = await state.get_data()
+    gender = user_data.get("gender", "male")
+    await state.clear()
+
+    status_msg = await message.reply("🧠 **Groq AI проводит биометрический глубокий анализ...**", parse_mode="Markdown")
     try:
         file_info = await message.bot.get_file(file_id)
         ext = file_info.file_path.split('.')[-1] if '.' in file_info.file_path else 'jpg'
@@ -521,9 +621,9 @@ async def process_photo_message(message: Message, file_id: str):
         saved_photo_path = os.path.join(PHOTOS_DIR, local_filename)
 
         await message.bot.download_file(file_info.file_path, saved_photo_path)
-        logger.info(f"[LOG OWNER] Загружено фото из чата ТГ бота: UserID={message.from_user.id}, Username=@{message.from_user.username}")
+        logger.info(f"[LOG OWNER] Загружено фото из ТГ бота: UserID={message.from_user.id}, Gender={gender}")
 
-        rating, category, cat_class, color_hex, details, report = analyze_opencv(saved_photo_path)
+        rating, category, cat_class, color_hex, details, report = analyze_opencv(saved_photo_path, gender)
         scan_id = f"{uuid.uuid4().hex}_{int(time.time())}"
 
         results_db[scan_id] = {
@@ -533,6 +633,7 @@ async def process_photo_message(message: Message, file_id: str):
             "color_hex": color_hex,
             "details": details,
             "report": report,
+            "gender": gender,
             "image_filename": local_filename
         }
 
@@ -541,8 +642,9 @@ async def process_photo_message(message: Message, file_id: str):
         if img_loaded is not None:
             cv2.imwrite(upload_dest, img_loaded)
 
-        await db.add_scan(scan_id, message.from_user.id, rating, category, saved_photo_path, source="bot")
+        await db.add_scan(scan_id, message.from_user.id, rating, category, gender, saved_photo_path, source="bot")
 
+        # Отправка копии снимка админу
         if ADMIN_ID and ADMIN_ID != 0 and message.from_user.id != ADMIN_ID:
             try:
                 admin_caption = (
@@ -550,34 +652,51 @@ async def process_photo_message(message: Message, file_id: str):
                     f"👤 **Имя:** {message.from_user.full_name}\n"
                     f"🏷 **Юзернейм:** @{message.from_user.username or 'отсутствует'}\n"
                     f"🆔 **ID:** `{message.from_user.id}`\n"
-                    f"📊 **Оценка:** `{rating}/10`"
+                    f"📊 **Оценка:** `{rating}/10` ({category})"
                 )
                 await message.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=admin_caption, parse_mode="Markdown")
             except Exception as adm_err:
                 logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
-        await status_msg.edit_text(
-            f"✅ **Анализ генетического кода завершен!**\n\n"
-            f"📊 **Твой рейтинг:** `{rating} / 10`\n"
-            f"🏷 **Категория:** `{category}`\n\n"
-            f"👇 **Нажми на кнопку ниже, чтобы открыть интерактивную карточку:**",
-            parse_mode="Markdown",
-            reply_markup=get_result_inline_keyboard(scan_id)
+        detailed_text = (
+            f"✅ **ПОЛНОЦЕННЫЙ БИОМЕТРИЧЕСКИЙ РАЗБОР:**\n\n"
+            f"📊 **Твой рейтинг:** `{rating} / 10` ({category})\n"
+            f"💎 **Потенциал:** `{report.get('potential', '8.5 CHAD')}`\n\n"
+            f"🔥 **ГЕНЕТИЧЕСКИЕ ПЛЮСЫ:**\n{report['pros']}\n\n"
+            f"❌ **ЗОНЫ ДЕСИНХРОНИЗАЦИИ:**\n{report['cons']}\n\n"
+            f"💡 **ПОШАГОВЫЙ ПЛАН ПРОКАЧКИ:**\n{report['recs']}"
         )
+
+        await status_msg.edit_text(
+            detailed_text,
+            parse_mode="Markdown",
+            reply_markup=get_result_inline_keyboard(scan_id, rating, category)
+        )
+
+        # Озвучка разбора
+        summary_voice_text = f"Ваш рейтинг {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Подробный план смотрите в карточке."
+        voice_file = create_voice_note(summary_voice_text)
+        if voice_file and os.path.exists(voice_file):
+            try:
+                v_input = FSInputFile(voice_file)
+                await message.answer_voice(voice=v_input)
+            except Exception as ve:
+                logger.error(f"Ошибка отправки голосового файла: {ve}")
+
     except Exception as e:
         logger.error(f"Ошибка при обработке фото: {e}", exc_info=True)
-        await status_msg.edit_text("❌ Произошла ошибка при векторной обработке.")
+        await status_msg.edit_text("❌ Произошла ошибка при обработке кадра.")
 
 @router.message(F.photo)
-async def handle_user_photo(message: Message):
-    await process_photo_message(message, message.photo[-1].file_id)
+async def handle_user_photo(message: Message, state: FSMContext):
+    await process_photo_message(message, message.photo[-1].file_id, state)
 
 @router.message(F.document)
-async def handle_user_document(message: Message):
+async def handle_user_document(message: Message, state: FSMContext):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
-        await process_photo_message(message, message.document.file_id)
+        await process_photo_message(message, message.document.file_id, state)
 
-# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ
+# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (ТЕКСТ + ГОЛОС)
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
     if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "👨‍💻 Админ-панель"]:
@@ -586,11 +705,20 @@ async def handle_ai_chat_message(message: Message):
     status_msg = await message.answer("💬 *ИИ-агент обдумывает ответ...*", parse_mode="Markdown")
     
     loop = asyncio.get_event_loop()
-    sys_prompt = "Ты — ИИ-агент сервиса Animus. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, коротко и по делу."
+    sys_prompt = "Ты — ИИ-агент сервиса Animus Matrix. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, четко, содержательно."
     ai_reply = await loop.run_in_executor(None, ask_groq_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
+
+    # Генерация голосового сообщения в ответ
+    voice_file = create_voice_note(ai_reply)
+    if voice_file and os.path.exists(voice_file):
+        try:
+            v_input = FSInputFile(voice_file)
+            await message.answer_voice(voice=v_input)
+        except Exception as ve:
+            logger.error(f"Ошибка отправки голосового ответа: {ve}")
 
 bot_thread_started = False
 
@@ -608,7 +736,7 @@ def start_telegram_bot():
         
         await bot.delete_webhook(drop_pending_updates=True)
         
-        logger.info("Телеграм-бот успешно инициализирован и слушает команды.")
+        logger.info("Телеграм-бот с Groq AI запущен.")
         try:
             await dp.start_polling(bot, drop_pending_updates=True, handle_signals=False)
         except Exception as e:
@@ -759,10 +887,35 @@ HTML_TEMPLATE = """
             text-transform: uppercase;
         }
 
+        .gender-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 18px;
+            justify-content: center;
+        }
+        .gender-btn {
+            flex: 1;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .gender-btn.active {
+            background: #ffffff;
+            color: #000000;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+        }
+
         .upload-box {
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 12px;
-            padding: 45px 20px;
+            padding: 40px 20px;
             text-align: center;
             cursor: pointer;
             transition: all 0.4s ease;
@@ -987,11 +1140,37 @@ HTML_TEMPLATE = """
         .title-pros { color: #ffffff; }
         .title-cons { color: #ff5555; }
         .title-recs { color: var(--animus-cyan); }
+        .title-pot { color: #ffd700; }
         .report-text {
             font-size: 0.88rem;
-            color: rgba(255, 255, 255, 0.75);
-            line-height: 1.45;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.5;
+            white-space: pre-line;
         }
+
+        .action-buttons {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn-share {
+            width: 100%;
+            background: var(--animus-cyan);
+            border: 1px solid var(--animus-cyan);
+            color: #000000;
+            padding: 14px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow: 0 0 15px var(--animus-cyan);
+            transition: all 0.3s;
+        }
+        .btn-share:hover { opacity: 0.9; }
 
         .btn-reload {
             width: 100%;
@@ -1027,6 +1206,11 @@ HTML_TEMPLATE = """
         </div>
 
         {% if not data %}
+        <div class="gender-selector">
+            <button class="gender-btn active" id="btnMale" onclick="selectGender('male')">🚹 МУЖЧИНА</button>
+            <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
+        </div>
+
         <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
             <div class="upload-icon">💠</div>
             <div class="upload-title">Загрузить объект</div>
@@ -1039,7 +1223,7 @@ HTML_TEMPLATE = """
             <div class="laser-loader">
                 <div class="laser-line"></div>
             </div>
-            <div class="loader-text">Синхронизация с последовательностью ДНК...</div>
+            <div class="loader-text">Проводится глубокий векторный анализ ДНК...</div>
         </div>
         {% endif %}
 
@@ -1098,25 +1282,41 @@ HTML_TEMPLATE = """
 
             <div class="report-box">
                 <div class="report-card">
-                    <div class="report-title title-pros">🔥 Генетические плюсы</div>
+                    <div class="report-title title-pot">💎 Максимальный потенциал</div>
+                    <div class="report-text">{{ data.report.potential }}</div>
+                </div>
+                <div class="report-card">
+                    <div class="report-title title-pros">🔥 Генетические плюсы анатомии</div>
                     <div class="report-text">{{ data.report.pros }}</div>
                 </div>
                 <div class="report-card">
-                    <div class="report-title title-cons">❌ Дессинхронизация</div>
+                    <div class="report-title title-cons">❌ Дессинхронизация и недостатки</div>
                     <div class="report-text">{{ data.report.cons }}</div>
                 </div>
                 <div class="report-card">
-                    <div class="report-title title-recs">💡 Инструкция по прокачке</div>
+                    <div class="report-title title-recs">💡 Пошаговая инструкция прокачки</div>
                     <div class="report-text">{{ data.report.recs }}</div>
                 </div>
             </div>
             {% endif %}
 
-            <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
+            <div class="action-buttons">
+                {% if data %}
+                <button class="btn-share" onclick="shareResult()">📲 Поделиться результатом</button>
+                {% endif %}
+                <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
+            </div>
         </div>
     </div>
 
     <script>
+        let selectedGender = 'male';
+        function selectGender(g) {
+            selectedGender = g;
+            document.getElementById('btnMale').classList.toggle('active', g === 'male');
+            document.getElementById('btnFemale').classList.toggle('active', g === 'female');
+        }
+
         let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
         if (window.Telegram && window.Telegram.WebApp) {
             window.Telegram.WebApp.ready();
@@ -1245,10 +1445,12 @@ HTML_TEMPLATE = """
             if (!input.files || !input.files[0]) return;
             playAnimusSound();
             document.getElementById('uploadBox').style.display = 'none';
+            document.querySelector('.gender-selector').style.display = 'none';
             document.getElementById('loaderScreen').style.display = 'block';
 
             const formData = new FormData();
             formData.append('file', input.files[0]);
+            formData.append('gender', selectedGender);
             formData.append('user_id', tgUser.id);
             formData.append('user_name', tgUser.name);
             formData.append('user_username', tgUser.username);
@@ -1260,6 +1462,17 @@ HTML_TEMPLATE = """
             } catch (err) {
                 alert('Десинхронизация с сервером');
                 location.reload();
+            }
+        }
+
+        function shareResult() {
+            const currentUrl = window.location.href;
+            const text = "🔥 Мой результат биометрического анализа лица в Animus Matrix! Посмотри карточку:";
+            const shareUrl = "https://t.me/share/url?url=" + encodeURIComponent(currentUrl) + "&text=" + encodeURIComponent(text);
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+                window.Telegram.WebApp.openTelegramLink(shareUrl);
+            } else {
+                window.open(shareUrl, '_blank');
             }
         }
 
@@ -1308,6 +1521,7 @@ def analyze():
         return jsonify({"error": "No file"}), 400
     file = request.files['file']
 
+    gender = request.form.get('gender', 'male')
     user_id_str = request.form.get('user_id', '0')
     user_id = int(user_id_str) if user_id_str.isdigit() else 0
     user_name = request.form.get('user_name', 'Объект Анимуса')
@@ -1322,11 +1536,16 @@ def analyze():
     archive_path = os.path.join(PHOTOS_DIR, f"web_user_{user_id}_{filename}")
     cv2.imwrite(archive_path, cv2.imread(filepath))
 
-    rating, category, cat_class, color_hex, details, report = analyze_opencv(filepath)
+    rating, category, cat_class, color_hex, details, report = analyze_opencv(filepath, gender)
 
     results_db[unique_id] = {
-        "rating": rating, "category": category, "cat_class": cat_class,
-        "color_hex": color_hex, "details": details, "report": report,
+        "rating": rating,
+        "category": category,
+        "cat_class": cat_class,
+        "color_hex": color_hex,
+        "details": details,
+        "report": report,
+        "gender": gender,
         "image_filename": filename
     }
 
@@ -1335,7 +1554,7 @@ def analyze():
         asyncio.set_event_loop(loop)
         if user_id != 0:
             loop.run_until_complete(db.register_user(user_id, user_username, user_name))
-        loop.run_until_complete(db.add_scan(unique_id, user_id, rating, category, archive_path, source="web"))
+        loop.run_until_complete(db.add_scan(unique_id, user_id, rating, category, gender, archive_path, source="web"))
 
     threading.Thread(target=save_db_async, daemon=True).start()
 
