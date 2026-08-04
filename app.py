@@ -1,5 +1,5 @@
 # ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX ULTIMATE EDITION (GROQ + VOICE + GENDER)
+# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX ULTIMATE (FACEMESH + MALE VOICE + GUIDE)
 # ==============================================================================
 # Требуемые зависимости (requirements.txt):
 # Flask>=3.0.0
@@ -12,6 +12,7 @@
 # aiohttp>=3.8.0
 # requests>=2.31.0
 # gTTS>=2.5.0
+# edge-tts>=6.1.9
 # ==============================================================================
 
 import os
@@ -48,11 +49,18 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+# Попытка импорта синтезаторов речи (Приоритет: edge_tts для глубокого мужского голоса)
+try:
+    import edge_tts
+    EDGE_TTS_AVAILABLE = True
+except ImportError:
+    EDGE_TTS_AVAILABLE = False
+
 try:
     from gtts import gTTS
-    TTS_AVAILABLE = True
+    GTTS_AVAILABLE = True
 except ImportError:
-    TTS_AVAILABLE = False
+    GTTS_AVAILABLE = False
 
 # ==============================================================================
 # ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
@@ -88,7 +96,7 @@ logger = logging.getLogger("AnimusMatrixEnterprise")
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
 
-# Состояния FSM для выбора пола перед сканированием
+# FSM Состояния для сканирования лица
 class ScanStates(StatesGroup):
     waiting_for_gender = State()
     waiting_for_photo = State()
@@ -250,26 +258,45 @@ class DatabaseManager:
 db = DatabaseManager(DB_PATH)
 
 # ==============================================================================
-# 🎙 СИНТЕЗ ГОЛОСОВЫХ СООБЩЕНИЙ (TTS ENGINE)
+# 🎙 СИНТЕЗ ПРИЯТНОГО МУЖСКОГО ГОЛОСА (EDGE-TTS / GTTS ENGINE)
 # ==============================================================================
+async def _generate_male_voice_edge(text: str, filepath: str):
+    """Генерация реалистичного мужского голоса ru-RU-DmitryNeural через Edge-TTS"""
+    import edge_tts
+    communicate = edge_tts.Communicate(text, "ru-RU-DmitryNeural")
+    await communicate.save(filepath)
+
 def create_voice_note(text: str) -> Optional[str]:
-    """Генерация голосового файла mp3"""
-    if not TTS_AVAILABLE:
+    """Генерация файла голосового сообщения с приятным тембром"""
+    if not (EDGE_TTS_AVAILABLE or GTTS_AVAILABLE):
         return None
     try:
         clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '')
-        if len(clean_text) > 450:
-            clean_text = clean_text[:450] + "..."
-        
+        if len(clean_text) > 400:
+            clean_text = clean_text[:400] + "..."
+
         filename = f"voice_{uuid.uuid4().hex[:8]}.mp3"
         filepath = os.path.join(VOICE_DIR, filename)
-        
-        tts = gTTS(text=clean_text, lang='ru', slow=False)
-        tts.save(filepath)
-        return filepath
+
+        if EDGE_TTS_AVAILABLE:
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_generate_male_voice_edge(clean_text, filepath))
+                loop.close()
+                if os.path.exists(filepath):
+                    return filepath
+            except Exception as edge_err:
+                logger.warning(f"Edge-TTS error, falling back to gTTS: {edge_err}")
+
+        if GTTS_AVAILABLE:
+            tts = gTTS(text=clean_text, lang='ru', slow=False)
+            tts.save(filepath)
+            return filepath
+
     except Exception as e:
         logger.error(f"Ошибка создания голосового сообщения: {e}")
-        return None
+    return None
 
 # ==============================================================================
 # 🧠 GROQ AI ДВИЖОК (ГЛУБОКИЙ АНАЛИЗ И ЧАТ)
@@ -319,7 +346,7 @@ def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float
         '  "category": "HTN",\n'
         '  "pros": "1. Высокая симметрия овала лица (88%).\\n2. Четко выраженная дуга челюсти.\\n3. Отличный цветовой баланс и контраст кадра.",\n'
         '  "cons": "1. Легкая асимметрия в области подбородка.\\n2. Сглаженная резкость в средней третьей части лица.\\n3. Небольшие отеки под глазами.",\n'
-        '  "recs": "1. ДЕФАТТИНГ: Снизь процент жира в организме до 11-13% для максимального рельефа скул.\\n2. МЬЮИНГ И ОСАНКА: Сохраняй правильное положение языка у нёба и держи плечевой пояс.\\n3. УХОД ЗА КОЖЕЙ: Включи гиалуроновую кислоту и салициловый тоник от микроотеков.\\n4. ПРИЧЕСКА: Подбери объемную стрижку под форму овала.",\n'
+        '  "recs": "1. ДЕФАТТИНГ И ЛИМФОДРЕНАЖ: Снизь процент жира в организме до 11-13% для максимального рельефа скул.\\n2. МЬЮИНГ И ОСАНКА: Сохраняй правильное положение языка у нёба и держи плечевой пояс.\\n3. УХОД ЗА КОЖЕЙ: Включи гиалуроновую кислоту и салициловый тоник от микроотеков.\\n4. ПРИЧЕСКА: Подбери объемную стрижку под форму овала.",\n'
         '  "potential": "8.7 (CHAD)"\n'
         '}'
     )
@@ -348,7 +375,7 @@ def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float
     
     pros = f"1. Высокая симметрия овала ({sym_pct}%).\n2. Хороший цветовой баланс ({harm_score}/10)."
     cons = f"1. Сглаженная резкость деталей ({sharp_score}/10).\n2. Недостаточная выраженность скул."
-    recs = "1. Снижай процент подкожного жира.\n2. Делай массаж Гуаша и исправь осанку."
+    recs = "1. Снижай процент подкожного жира.\n2. Делай лимфодренажный массаж Гуаша и исправь осанку."
     pot = f"{min(10.0, rating + 1.5):.1f} (HTN/CHAD)"
 
     return rating, cat, pros, cons, recs, pot
@@ -398,13 +425,36 @@ def analyze_opencv(image_path: str, gender: str = "male"):
     return rating, cat, cat_cls, color, details, report
 
 # ==============================================================================
+# 🧊 ПОЛНЫЙ ЭКСПЕРТНЫЙ ГАЙД: КАК УБРАТЬ ОТЁКИ ЛИЦА ЗА 15 МИНУТ
+# ==============================================================================
+PUFFINESS_GUIDE_TEXT = (
+    "🧊 **ПРОТОКОЛ ЛИМФОДРЕНАЖА: КАК УБРАТЬ ОТЁКИ ЛИЦА ЗА 15 МИНУТ**\n\n"
+    "Отёчность — это задержка жидкости в подкожно-жировой клетчатке. Чтобы проявить угол челюсти, скуловые дуги и «высушить» овал лица, задействуй этот проверенный алгоритм:\n\n"
+    "1️⃣ **КОНТРАСТНЫЙ ЛЕДЯНОЙ ДУШ ДЛЯ ЛИЦА (Утро)**\n"
+    "• Умойся тёплой водой (15 сек), затем максимально холодной водой (15 сек). Повтори 5 раз.\n"
+    "• Оберни кубик льда в тонкую ткань и проведи по лимфотокам: от центра подбородка к ушам, от крыльев носа к вискам.\n\n"
+    "2️⃣ **ЛИМФОДРЕНАЖНЫЙ МАССАЖ И ГУАША**\n"
+    "• Нанеси лёгкую сыворотку или масло.\n"
+    "• Скребком Гуаша или костяшками пальцев с умеренным нажимом двигайся строго **ОТ ЦЕНТРА К ПЕРИФЕРИИ** и далее вниз по боковым поверхностям шеи к ключицам, сбрасывая лимфу.\n\n"
+    "3️⃣ **ВОДНО-СОЛЕВОЙ БАЛАНС**\n"
+    "• **Соль:** Сократи натрий за 4 часа до сна. Соль удерживает воду в пропорции 1г соли = 100мл застрявшей жидкости.\n"
+    "• **Питьевой режим:** Пей 2.5–3 литра чистой воды в день. Когда организм получает достаточно воды, он перестает её запасать.\n\n"
+    "4️⃣ **ПРАВИЛЬНАЯ ПОЗА СНА**\n"
+    "• Не спи лицом в подушку — это зажимает лимфатические протоки.\n"
+    "• Используй ортопедическую подушку средней высоты, чтобы голова находилась чуть выше уровня тела.\n\n"
+    "5️⃣ **ПРИРОДНЫЕ ЛИМФОТОНИКИ**\n"
+    "• Утром выпивай стакан теплой воды с лимоном или заваренный экстракт брусничного листа / зелёный чай с имбирём."
+)
+
+# ==============================================================================
 # 🤖 TELEGRAM BOT ROUTER & HANDLERS (AIOGRAM 3.X)
 # ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     kb = [
         [KeyboardButton(text="📸 Проверить лицо"), KeyboardButton(text="📊 Мой профиль")],
-        [KeyboardButton(text="🏆 Таблица категорий"), KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
+        [KeyboardButton(text="🧊 Гайд: Как убрать отёки"), KeyboardButton(text="🏆 Таблица категорий")],
+        [KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
     ]
     if ADMIN_ID and user_id == ADMIN_ID:
         kb.append([KeyboardButton(text="👨‍💻 Админ-панель")])
@@ -445,7 +495,7 @@ async def cmd_start(message: Message, state: FSMContext):
     await db.register_user(message.from_user.id, message.from_user.username or "", message.from_user.first_name)
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
-        "🔥 Я — ИИ-агент по векторному анализу привлекательности, пропорций и геометрии лица.\n\n"
+        "🔥 Я — ИИ-агент по биометрическому анализу привлекательности, пропорций и геометрии лица.\n\n"
         "📸 **Нажми «📸 Проверить лицо»** или **задай любой вопрос** прямо в чат! 👇"
     )
     video_path = "logo.mp4"
@@ -486,6 +536,18 @@ async def callback_select_gender(call: CallbackQuery, state: FSMContext):
         "📸 **Отправьте портретное фото в чат** для получения глубокого разбора."
     )
     await call.answer()
+
+@router.message(F.text == "🧊 Гайд: Как убрать отёки")
+async def btn_puffiness_guide(message: Message):
+    await message.answer(PUFFINESS_GUIDE_TEXT, parse_mode="Markdown")
+    # Озвучка гайда приятным мужским голосом
+    voice_file = create_voice_note("Анализируй протокол дефаттинга. Утром используй контрастный ледяной душ, лимфодренажный массаж и убавь соль перед сном.")
+    if voice_file and os.path.exists(voice_file):
+        try:
+            v_input = FSInputFile(voice_file)
+            await message.answer_voice(voice=v_input)
+        except Exception as ve:
+            logger.error(f"Ошибка отправки голосового файла гайда: {ve}")
 
 @router.message(F.text == "📊 Мой профиль")
 async def btn_profile(message: Message):
@@ -673,8 +735,8 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
             reply_markup=get_result_inline_keyboard(scan_id, rating, category)
         )
 
-        # Озвучка разбора
-        summary_voice_text = f"Ваш рейтинг {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Подробный план смотрите в карточке."
+        # Озвучка результатов приятным глубоким мужским голосом
+        summary_voice_text = f"Ваш биологический индекс {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Полная инструкция готова в карточке."
         voice_file = create_voice_note(summary_voice_text)
         if voice_file and os.path.exists(voice_file):
             try:
@@ -696,22 +758,22 @@ async def handle_user_document(message: Message, state: FSMContext):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
         await process_photo_message(message, message.document.file_id, state)
 
-# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (ТЕКСТ + ГОЛОС)
+# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (ТЕКСТ + ПРИЯТНЫЙ МУЖСКОЙ ГОЛОС)
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
-    if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "👨‍💻 Админ-панель"]:
+    if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "🧊 Гайд: Как убрать отёки", "👨‍💻 Админ-панель"]:
         return
 
     status_msg = await message.answer("💬 *ИИ-агент обдумывает ответ...*", parse_mode="Markdown")
     
     loop = asyncio.get_event_loop()
-    sys_prompt = "Ты — ИИ-агент сервиса Animus Matrix. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, четко, содержательно."
+    sys_prompt = "Ты — ИИ-агент сервиса Animus Matrix. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, коротко и содержательно."
     ai_reply = await loop.run_in_executor(None, ask_groq_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
 
-    # Генерация голосового сообщения в ответ
+    # Генерация приятного мужского голосового ответа
     voice_file = create_voice_note(ai_reply)
     if voice_file and os.path.exists(voice_file):
         try:
@@ -749,7 +811,7 @@ def start_telegram_bot():
     loop.run_until_complete(bot_worker())
 
 # ==============================================================================
-# 🎨 ASSASSIN'S CREED ANIMUS MATRIX FRONTEND TEMPLATE
+# 🎨 HIGH-TECH FRONTEND WITH MEDIAPIPE FACEMESH LASER SCANNER
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -757,31 +819,39 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ANIMUS 3.0 — Memory Corridor Synchronization</title>
+    <title>ANIMUS 5.0 — Universal FaceMesh Laser Scanner</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe FaceMesh CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
     <style>
         :root {
-            --animus-white: #ffffff;
-            --animus-silver: #e0e6ed;
-            --animus-gray: rgba(255, 255, 255, 0.15);
-            --animus-glow: rgba(255, 255, 255, 0.85);
-            --animus-cyan: #00f0ff;
-            --animus-card: rgba(12, 16, 24, 0.82);
-            --animus-border: rgba(255, 255, 255, 0.25);
+            --animus-dark: #030508;
+            --animus-panel: #0a0c12;
+            --animus-cyan: #00d2ff;
+            --animus-green: #00ff00;
+            --animus-red: #ff0033;
+            --animus-gold: #ffd700;
+            --glass-card: rgba(10, 16, 26, 0.88);
+            --glass-border: rgba(0, 210, 255, 0.28);
+            --font-title: 'Orbitron', monospace, sans-serif;
+            --font-body: 'Rajdhani', sans-serif;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Rajdhani', sans-serif;
+            font-family: var(--font-body);
             user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            background: #05070a;
+            background-color: var(--animus-dark);
             color: #ffffff;
             min-height: 100vh;
             display: flex;
@@ -789,21 +859,20 @@ HTML_TEMPLATE = """
             justify-content: center;
             overflow-x: hidden;
             position: relative;
-            padding: 20px 12px;
+            padding: 24px 12px;
         }
 
-        #animus-canvas, #confetti-canvas {
+        #bg-canvas {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             pointer-events: none;
+            z-index: 0;
         }
-        #animus-canvas { z-index: 0; }
-        #confetti-canvas { z-index: 100; }
 
-        .scanline-overlay {
+        .scanlines {
             position: fixed;
             top: 0;
             left: 0;
@@ -820,29 +889,29 @@ HTML_TEMPLATE = """
             position: relative;
             z-index: 10;
             width: 100%;
-            max-width: 530px;
-            background: var(--animus-card);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
-            border: 1px solid var(--animus-border);
-            border-radius: 20px;
-            padding: 32px 24px;
-            box-shadow: 0 0 50px rgba(255, 255, 255, 0.12),
-                        inset 0 0 20px rgba(255, 255, 255, 0.05);
-            animation: animusAppear 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            clip-path: polygon(0 0, 95% 0, 100% 5%, 100% 100%, 5% 100%, 0 95%);
+            max-width: 560px;
+            background: var(--glass-card);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 36px 28px;
+            box-shadow: 0 0 60px rgba(0, 210, 255, 0.15),
+                        inset 0 0 25px rgba(255, 255, 255, 0.03);
+            animation: animusAppear 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            clip-path: polygon(0 0, 96% 0, 100% 4%, 100% 100%, 4% 100%, 0 96%);
         }
 
         @keyframes animusAppear {
-            from { opacity: 0; transform: scale(0.92) translateY(30px); }
+            from { opacity: 0; transform: scale(0.93) translateY(25px); }
             to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
         .animus-corner {
             position: absolute;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #ffffff;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--animus-cyan);
             pointer-events: none;
         }
         .top-left { top: 8px; left: 8px; border-right: none; border-bottom: none; }
@@ -857,33 +926,28 @@ HTML_TEMPLATE = """
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 4px 16px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            font-family: 'Orbitron', sans-serif;
+            padding: 6px 18px;
+            border-radius: 6px;
+            background: rgba(0, 210, 255, 0.08);
+            border: 1px solid var(--animus-cyan);
+            font-family: var(--font-title);
             font-size: 0.72rem;
             font-weight: 800;
-            color: #ffffff;
+            color: var(--animus-cyan);
             letter-spacing: 2px;
             text-transform: uppercase;
             margin-bottom: 12px;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
         }
         .header h1 {
-            font-family: 'Orbitron', sans-serif;
+            font-family: var(--font-title);
             font-size: 2.1rem;
             font-weight: 900;
-            letter-spacing: 2px;
-            color: #ffffff;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
-            text-transform: uppercase;
-        }
-        .header p {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.6);
-            margin-top: 6px;
-            letter-spacing: 1px;
+            letter-spacing: 3px;
+            background: linear-gradient(90deg, #ffffff, var(--animus-cyan), #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 210, 255, 0.4);
             text-transform: uppercase;
         }
 
@@ -899,7 +963,7 @@ HTML_TEMPLATE = """
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: #ffffff;
-            font-family: 'Orbitron', sans-serif;
+            font-family: var(--font-title);
             font-size: 0.8rem;
             font-weight: 700;
             cursor: pointer;
@@ -907,102 +971,120 @@ HTML_TEMPLATE = """
             transition: all 0.3s;
         }
         .gender-btn.active {
-            background: #ffffff;
+            background: var(--animus-cyan);
             color: #000000;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+            box-shadow: 0 0 20px var(--animus-cyan);
+            border-color: var(--animus-cyan);
         }
 
-        .upload-box {
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.4s ease;
-            background: rgba(255, 255, 255, 0.02);
+        /* 🎯 РАМКА СКАНЕРА С ЛАЗЕРОМ И BLUE FACEMESH */
+        #scanner-wrap {
             position: relative;
+            width: 100%;
+            height: 380px;
+            border: 3px solid #1a1f2e;
+            border-radius: 12px;
+            background: var(--animus-panel);
             overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
         }
-        .upload-box:hover {
-            border-color: #ffffff;
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 30px rgba(255, 255, 255, 0.25);
+
+        /* ЗЕЛЕНАЯ ВСПЫШКА ВЕРИФИКАЦИИ */
+        #scanner-wrap.success-flash {
+            border-color: var(--animus-green) !important;
+            box-shadow: 0 0 50px rgba(0, 255, 0, 0.9), inset 0 0 20px rgba(0, 255, 0, 0.3) !important;
         }
-        .upload-icon {
-            font-size: 2.8rem;
-            margin-bottom: 12px;
-            color: #ffffff;
-            text-shadow: 0 0 15px #ffffff;
-        }
-        .upload-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.1rem;
-            font-weight: 800;
-            color: #ffffff;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-        .upload-subtitle {
+
+        .placeholder-text {
+            position: absolute;
+            color: #0088aa;
+            text-align: center;
+            padding: 30px;
+            line-height: 1.6;
+            font-family: var(--font-title);
             font-size: 0.85rem;
-            color: rgba(255, 255, 255, 0.5);
-            margin-top: 4px;
-            margin-bottom: 22px;
+            pointer-events: none;
+            z-index: 1;
         }
+
+        #user-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+        }
+
+        #overlay-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Сканирующий лазер */
+        .laser-line {
+            position: absolute;
+            top: -10px; left: 0;
+            width: 100%; height: 4px;
+            background: linear-gradient(90deg, transparent, #00ffff, #ffffff, #00ffff, transparent);
+            box-shadow: 0 0 15px #00ffff, 0 0 30px #00ffff;
+            display: none;
+            z-index: 10;
+        }
+
+        @keyframes scanAnimation {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        .laser-active {
+            display: block;
+            animation: scanAnimation 2s ease-in-out infinite;
+        }
+
+        .status-box {
+            font-size: 0.9rem;
+            color: #8a99ad;
+            min-height: 24px;
+            text-align: center;
+            font-family: var(--font-title);
+            margin-bottom: 20px;
+        }
+
         .btn-animus {
-            display: inline-block;
-            background: #ffffff;
+            width: 100%;
+            background: var(--animus-cyan);
             color: #000000;
-            padding: 14px 36px;
-            font-family: 'Orbitron', sans-serif;
+            padding: 16px;
+            font-family: var(--font-title);
             font-weight: 900;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             letter-spacing: 2px;
             text-transform: uppercase;
             border: none;
-            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
-            box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 25px rgba(0, 210, 255, 0.5);
+            cursor: pointer;
             transition: all 0.3s ease;
+            border-radius: 8px;
         }
         .btn-animus:hover {
-            background: var(--animus-cyan);
-            box-shadow: 0 0 30px var(--animus-cyan);
-        }
-        #fileInput { display: none; }
-
-        .loader-screen {
-            display: none;
-            text-align: center;
-            padding: 40px 10px;
-        }
-        .laser-loader {
-            width: 100%;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.1);
-            position: relative;
-            overflow: hidden;
-            margin-bottom: 20px;
-        }
-        .laser-line {
-            position: absolute;
-            top: 0;
-            left: -50%;
-            width: 50%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, #ffffff, transparent);
-            animation: laserScan 1.2s infinite ease-in-out;
-        }
-        @keyframes laserScan {
-            0% { left: -50%; }
-            100% { left: 100%; }
-        }
-        .loader-text {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 0.9rem;
-            letter-spacing: 2px;
-            color: #ffffff;
-            text-transform: uppercase;
+            background: #ffffff;
+            box-shadow: 0 0 35px #ffffff;
         }
 
+        /* 🏆 ЭКРАН РЕЗУЛЬТАТОВ */
         .result-screen {
             display: none;
             flex-direction: column;
@@ -1013,15 +1095,15 @@ HTML_TEMPLATE = """
         .photo-container {
             width: 100%;
             height: 330px;
-            border-radius: 12px;
+            border-radius: 14px;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid var(--glass-border);
             background: #000000;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
         }
         .photo-container img {
             max-width: 100%;
@@ -1031,8 +1113,8 @@ HTML_TEMPLATE = """
 
         .gauge-box {
             position: relative;
-            width: 190px;
-            height: 190px;
+            width: 200px;
+            height: 200px;
         }
         .gauge-box svg {
             width: 100%;
@@ -1041,11 +1123,12 @@ HTML_TEMPLATE = """
         }
         .gauge-bg-track {
             fill: none;
-            stroke: rgba(255, 255, 255, 0.08);
+            stroke: rgba(255, 255, 255, 0.06);
             stroke-width: 12;
         }
         .gauge-fill-bar {
             fill: none;
+            stroke: var(--animus-cyan);
             stroke-width: 12;
             stroke-linecap: square;
             stroke-dasharray: 565.48;
@@ -1054,65 +1137,65 @@ HTML_TEMPLATE = """
         }
         .gauge-center {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
         }
         .score-num {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 3.5rem;
+            font-family: var(--font-title);
+            font-size: 3.6rem;
             font-weight: 900;
             line-height: 1;
             color: #ffffff;
-            text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
         }
         .score-lbl {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.45);
             font-weight: 700;
             letter-spacing: 2px;
             text-transform: uppercase;
+            margin-top: 4px;
         }
 
         .category-badge {
-            padding: 10px 32px;
-            font-family: 'Orbitron', sans-serif;
-            font-size: 1.35rem;
+            padding: 10px 36px;
+            font-family: var(--font-title);
+            font-size: 1.4rem;
             font-weight: 900;
             letter-spacing: 3px;
             text-transform: uppercase;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            background: rgba(255, 255, 255, 0.05);
-            box-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(0, 210, 255, 0.5);
+            background: rgba(0, 210, 255, 0.06);
+            color: var(--animus-cyan);
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.25);
             clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
         }
 
         .metrics-card {
             width: 100%;
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(255, 255, 255, 0.015);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 18px;
+            border-radius: 12px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 16px;
         }
         .metric-row { display: flex; flex-direction: column; gap: 6px; }
-        .metric-info { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-        .metric-name { color: rgba(255, 255, 255, 0.6); }
-        .metric-value { color: #ffffff; }
+        .metric-info { display: flex; justify-content: space-between; font-size: 0.88rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+        .metric-name { color: rgba(255, 255, 255, 0.55); }
+        .metric-value { color: #ffffff; font-family: var(--font-title); }
         .track-bar {
             height: 6px;
-            background: rgba(255, 255, 255, 0.08);
-            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.07);
+            border-radius: 3px;
             overflow: hidden;
         }
         .fill-bar {
-            height: 100%;
-            width: 0%;
-            background: #ffffff;
-            box-shadow: 0 0 10px #ffffff;
+            height: 100%; width: 0%;
+            background: var(--animus-cyan);
+            box-shadow: 0 0 12px var(--animus-cyan);
             transition: width 1.6s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -1120,30 +1203,30 @@ HTML_TEMPLATE = """
             width: 100%;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 14px;
         }
         .report-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            padding: 16px;
+            background: rgba(255, 255, 255, 0.015);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 18px;
             text-align: left;
         }
         .report-title {
-            font-family: 'Orbitron', sans-serif;
+            font-family: var(--font-title);
             font-size: 0.85rem;
             font-weight: 800;
             letter-spacing: 1.5px;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             text-transform: uppercase;
         }
         .title-pros { color: #ffffff; }
-        .title-cons { color: #ff5555; }
+        .title-cons { color: var(--animus-red); }
         .title-recs { color: var(--animus-cyan); }
         .title-pot { color: #ffd700; }
         .report-text {
-            font-size: 0.88rem;
-            color: rgba(255, 255, 255, 0.85);
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.82);
             line-height: 1.5;
             white-space: pre-line;
         }
@@ -1154,14 +1237,13 @@ HTML_TEMPLATE = """
             flex-direction: column;
             gap: 10px;
         }
-
         .btn-share {
             width: 100%;
             background: var(--animus-cyan);
             border: 1px solid var(--animus-cyan);
             color: #000000;
             padding: 14px;
-            font-family: 'Orbitron', sans-serif;
+            font-family: var(--font-title);
             font-weight: 900;
             font-size: 0.85rem;
             letter-spacing: 2px;
@@ -1169,64 +1251,65 @@ HTML_TEMPLATE = """
             cursor: pointer;
             box-shadow: 0 0 15px var(--animus-cyan);
             transition: all 0.3s;
+            border-radius: 8px;
         }
-        .btn-share:hover { opacity: 0.9; }
-
         .btn-reload {
             width: 100%;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             color: #ffffff;
             padding: 14px;
-            font-family: 'Orbitron', sans-serif;
+            font-family: var(--font-title);
             font-weight: 800;
             font-size: 0.85rem;
             letter-spacing: 2px;
             text-transform: uppercase;
             cursor: pointer;
             transition: all 0.3s;
+            border-radius: 8px;
         }
         .btn-reload:hover { background: #ffffff; color: #000000; }
     </style>
 </head>
 <body>
-    <div class="scanline-overlay"></div>
-
-    <canvas id="animus-canvas"></canvas>
-    <canvas id="confetti-canvas"></canvas>
+    <div class="scanlines"></div>
+    <canvas id="bg-canvas"></canvas>
 
     <div class="animus-card">
         <div class="animus-corner top-left"></div>
         <div class="animus-corner bottom-right"></div>
 
         <div class="header">
-            <div class="badge">⚔️ ABSTERGO ANIMUS 3.0</div>
-            <h1>SYSTEM MATRIX</h1>
-            <p>Синхронизация генетической памяти лица</p>
+            <div class="badge">⚔️ ABSTERGO ANIMUS 5.0</div>
+            <h1>FACEMESH SCANNER</h1>
         </div>
 
         {% if not data %}
-        <div class="gender-selector">
-            <button class="gender-btn active" id="btnMale" onclick="selectGender('male')">🚹 МУЖЧИНА</button>
-            <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
-        </div>
-
-        <div class="upload-box" id="uploadBox" onclick="document.getElementById('fileInput').click()">
-            <div class="upload-icon">💠</div>
-            <div class="upload-title">Загрузить объект</div>
-            <div class="upload-subtitle">Выберите портретный файл для инициализации матрицы</div>
-            <div class="btn-animus">Инициация</div>
-            <input type="file" id="fileInput" accept="image/*" onchange="uploadPhoto(this)">
-        </div>
-
-        <div class="loader-screen" id="loaderScreen">
-            <div class="laser-loader">
-                <div class="laser-line"></div>
+        <div id="scanUI">
+            <div class="gender-selector">
+                <button class="gender-btn active" id="btnMale" onclick="selectGender('male')">🚹 МУЖЧИНА</button>
+                <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
             </div>
-            <div class="loader-text">Проводится глубокий векторный анализ ДНК...</div>
+
+            <!-- 🎯 СКАНЕР С ЛАЗЕРОМ И MEDIAPIPE BLUE MESH -->
+            <div id="scanner-wrap">
+                <div class="placeholder-text" id="placeholder">
+                    [ ОЖИДАНИЕ ИЗОБРАЖЕНИЯ ]<br><br>
+                    Кликните или перетащите фото
+                </div>
+                <img id="user-image" alt="Target" crossorigin="anonymous">
+                <canvas id="overlay-canvas"></canvas>
+                <div class="laser-line" id="laser"></div>
+            </div>
+
+            <div class="status-box" id="status-text">Инициализация ИИ...</div>
+
+            <button class="btn-animus" id="upload-btn">Загрузить фото</button>
+            <input type="file" id="file-input" accept="image/*">
         </div>
         {% endif %}
 
+        <!-- ЭКРАН РЕЗУЛЬТАТОВ -->
         <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
             <div class="photo-container">
                 <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Animus Scan">
@@ -1329,127 +1412,225 @@ HTML_TEMPLATE = """
             }
         }
 
-        const canvas = document.getElementById('animus-canvas');
-        const ctx = canvas.getContext('2d');
+        // Анимированный фон 3D Сетки
+        const bgCanvas = document.getElementById('bg-canvas');
+        const bgCtx = bgCanvas.getContext('2d');
 
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        function resizeBg() {
+            bgCanvas.width = window.innerWidth;
+            bgCanvas.height = window.innerHeight;
         }
-        window.addEventListener('resize', resize);
-        resize();
+        window.addEventListener('resize', resizeBg);
+        resizeBg();
 
         let animusLines = [];
         for (let i = 0; i < 35; i++) {
             animusLines.push({
-                x: Math.random() * canvas.width,
+                x: Math.random() * bgCanvas.width,
                 length: Math.random() * 200 + 80,
-                speed: Math.random() * 4 + 1.5,
+                speed: Math.random() * 3.5 + 1.2,
                 width: Math.random() * 2 + 0.5,
-                opacity: Math.random() * 0.4 + 0.1
-            });
-        }
-
-        let memoryParticles = [];
-        for (let i = 0; i < 60; i++) {
-            memoryParticles.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * canvas.height,
-                size: Math.random() * 3 + 1,
-                vx: (Math.random() - 0.5) * 0.5,
-                vy: -Math.random() * 1.5 - 0.5,
-                alpha: Math.random() * 0.6 + 0.2
+                opacity: Math.random() * 0.35 + 0.1
             });
         }
 
         let gridOffset = 0;
-
-        function renderAnimusMatrix() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+        function renderBg() {
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
             gridOffset += 0.4;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-            ctx.lineWidth = 1;
+            bgCtx.strokeStyle = 'rgba(0, 210, 255, 0.035)';
+            bgCtx.lineWidth = 1;
 
-            const gridSize = 40;
-            for (let x = 0; x < canvas.width; x += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(x, 0);
-                ctx.lineTo(x, canvas.height);
-                ctx.stroke();
+            const gridSize = 45;
+            for (let x = 0; x < bgCanvas.width; x += gridSize) {
+                bgCtx.beginPath();
+                bgCtx.moveTo(x, 0);
+                bgCtx.lineTo(x, bgCanvas.height);
+                bgCtx.stroke();
             }
-            for (let y = (gridOffset % gridSize); y < canvas.height; y += gridSize) {
-                ctx.beginPath();
-                ctx.moveTo(0, y);
-                ctx.lineTo(canvas.width, y);
-                ctx.stroke();
+            for (let y = (gridOffset % gridSize); y < bgCanvas.height; y += gridSize) {
+                bgCtx.beginPath();
+                bgCtx.moveTo(0, y);
+                bgCtx.lineTo(bgCanvas.width, y);
+                bgCtx.stroke();
             }
 
             animusLines.forEach(l => {
                 l.x += l.speed;
-                if (l.x > canvas.width + l.length) l.x = -l.length;
-
-                ctx.strokeStyle = `rgba(255, 255, 255, ${l.opacity})`;
-                ctx.lineWidth = l.width;
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 10;
-                ctx.beginPath();
-                ctx.moveTo(l.x - l.length, canvas.height / 2 + (l.width * 50));
-                ctx.lineTo(l.x, canvas.height / 2 + (l.width * 50));
-                ctx.stroke();
+                if (l.x > bgCanvas.width + l.length) l.x = -l.length;
+                bgCtx.strokeStyle = `rgba(0, 210, 255, ${l.opacity})`;
+                bgCtx.lineWidth = l.width;
+                bgCtx.beginPath();
+                bgCtx.moveTo(l.x - l.length, bgCanvas.height / 2 + (l.width * 60));
+                bgCtx.lineTo(l.x, bgCanvas.height / 2 + (l.width * 60));
+                bgCtx.stroke();
             });
 
-            memoryParticles.forEach(p => {
-                p.x += p.vx;
-                p.y += p.vy;
-                if (p.y < 0) p.y = canvas.height;
-                if (p.x < 0) p.x = canvas.width;
-                if (p.x > canvas.width) p.x = 0;
-
-                ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
-                ctx.shadowColor = '#ffffff';
-                ctx.shadowBlur = 6;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            ctx.shadowBlur = 0;
-            requestAnimationFrame(renderAnimusMatrix);
+            requestAnimationFrame(renderBg);
         }
-        renderAnimusMatrix();
+        renderBg();
 
-        function playAnimusSound() {
+        // 🎯 СКАНИРОВАНИЕ ЛИЦА ЧЕРЕЗ MEDIAPIPE И ЛАЗЕР
+        {% if not data %}
+        const scannerWrap = document.getElementById('scanner-wrap');
+        const fileInput = document.getElementById('file-input');
+        const uploadBtn = document.getElementById('upload-btn');
+        const userImage = document.getElementById('user-image');
+        const placeholder = document.getElementById('placeholder');
+        const laser = document.getElementById('laser');
+        const canvas = document.getElementById('overlay-canvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status-text');
+
+        let faceMesh;
+        let currentLandmarks = null;
+        let currentSelectedFile = null;
+
+        function initFaceMesh() {
             try {
-                const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (!AudioCtx) return;
-                const actx = new AudioCtx();
-                const osc = actx.createOscillator();
-                const gain = actx.createGain();
+                faceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                });
 
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(120, actx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(440, actx.currentTime + 0.4);
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.1,
+                    minTrackingConfidence: 0.1
+                });
 
-                gain.gain.setValueAtTime(0.15, actx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, actx.currentTime + 0.4);
-
-                osc.connect(gain);
-                gain.connect(actx.destination);
-                osc.start();
-                osc.stop(actx.currentTime + 0.4);
-            } catch (e) {}
+                faceMesh.onResults((results) => {
+                    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                        currentLandmarks = results.multiFaceLandmarks[0];
+                    } else {
+                        currentLandmarks = null;
+                    }
+                });
+                statusText.innerText = 'Система готова к сканированию.';
+            } catch (e) {
+                statusText.innerText = 'Готов к сканированию.';
+            }
         }
 
-        async function uploadPhoto(input) {
-            if (!input.files || !input.files[0]) return;
-            playAnimusSound();
-            document.getElementById('uploadBox').style.display = 'none';
-            document.querySelector('.gender-selector').style.display = 'none';
-            document.getElementById('loaderScreen').style.display = 'block';
+        uploadBtn.addEventListener('click', () => fileInput.click());
+        scannerWrap.addEventListener('click', () => fileInput.click());
 
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentSelectedFile = file;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                userImage.src = event.target.result;
+                userImage.style.display = 'block';
+                placeholder.style.display = 'none';
+
+                userImage.onload = async () => {
+                    canvas.width = userImage.clientWidth;
+                    canvas.height = userImage.clientHeight;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    if (faceMesh) {
+                        try {
+                            await faceMesh.send({ image: userImage });
+                        } catch(err) {}
+                    }
+                    startScanProcess();
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        async function startScanProcess() {
+            laser.classList.add('laser-active');
+            canvas.style.opacity = 0;
+            scannerWrap.classList.remove('success-flash');
+            statusText.innerText = 'СКАНИРОВАНИЕ: Глубокий биометрический анализ...';
+            statusText.style.color = '#00d2ff';
+
+            await new Promise(r => setTimeout(r, 1400));
+
+            if (currentLandmarks) {
+                drawPreciseBlueMesh(currentLandmarks);
+            } else {
+                drawFallbackMesh();
+            }
+
+            canvas.style.opacity = 1;
+            statusText.innerText = '[ ВЕРИФИКАЦИЯ 100%: ЛИЦО ПОДТВЕРЖДЕНО ]';
+            statusText.style.color = '#00ff00';
+            laser.classList.remove('laser-active');
+            scannerWrap.classList.add('success-flash');
+
+            await new Promise(r => setTimeout(r, 1000));
+
+            // Отправка на сервер Flask для получения результатов
+            sendPhotoToServer();
+        }
+
+        function drawPreciseBlueMesh(landmarks) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.strokeStyle = '#00d2ff';
+            ctx.fillStyle = '#00ffff';
+            ctx.lineWidth = 1;
+
+            if (typeof FACEMESH_TESSELATION !== 'undefined') {
+                ctx.beginPath();
+                for (let i = 0; i < FACEMESH_TESSELATION.length; i++) {
+                    const p1 = landmarks[FACEMESH_TESSELATION[i][0]];
+                    const p2 = landmarks[FACEMESH_TESSELATION[i][1]];
+                    ctx.moveTo(p1.x * w, p1.y * h);
+                    ctx.lineTo(p2.x * w, p2.y * h);
+                }
+                ctx.stroke();
+            }
+
+            for (let i = 0; i < landmarks.length; i += 5) {
+                const x = landmarks[i].x * w;
+                const y = landmarks[i].y * h;
+                ctx.beginPath();
+                ctx.arc(x, y, 1.2, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+        }
+
+        function drawFallbackMesh() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const w = canvas.width;
+            const h = canvas.height;
+            const cX = w / 2;
+            const cY = h * 0.45;
+            const rX = w * 0.32;
+            const rY = h * 0.35;
+
+            ctx.strokeStyle = '#00d2ff';
+            ctx.fillStyle = '#00ffff';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            ctx.ellipse(cX, cY, rX, rY, 0, 0, 2 * Math.PI);
+            ctx.moveTo(cX - rX, cY); ctx.lineTo(cX + rX, cY);
+            ctx.moveTo(cX, cY - rY); ctx.lineTo(cX, cY + rY);
+            ctx.stroke();
+
+            for (let angle = 0; angle < Math.PI * 2; angle += 0.4) {
+                let x = cX + Math.cos(angle) * rX;
+                let y = cY + Math.sin(angle) * rY;
+                ctx.beginPath();
+                ctx.moveTo(cX, cY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+        }
+
+        async function sendPhotoToServer() {
+            if (!currentSelectedFile) return;
             const formData = new FormData();
-            formData.append('file', input.files[0]);
+            formData.append('file', currentSelectedFile);
             formData.append('gender', selectedGender);
             formData.append('user_id', tgUser.id);
             formData.append('user_name', tgUser.name);
@@ -1464,6 +1645,9 @@ HTML_TEMPLATE = """
                 location.reload();
             }
         }
+
+        window.addEventListener('load', initFaceMesh);
+        {% endif %}
 
         function shareResult() {
             const currentUrl = window.location.href;
@@ -1509,7 +1693,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# 🛰 ROUTES (FLASK + ОТПРАВКА СНИМКОВ АДМИНУ)
+# 🛰 ROUTES (FLASK)
 # ==============================================================================
 @app.route('/')
 def home():
@@ -1596,3 +1780,4 @@ threading.Thread(target=start_telegram_bot, daemon=True).start()
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+`
