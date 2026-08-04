@@ -14,7 +14,7 @@ import aiosqlite
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 
-from flask import Flask, request, jsonify, render_template_string, send_from_directory
+from flask import Flask, request, jsonify, render_template_string
 
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import CommandStart, Command
@@ -276,12 +276,12 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    # Список только активных и высокоскоростных моделей Groq
+    # Оптимизированная цепочка активных моделей с автоматическим переключением при 429 rate limits
     models = [
         "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b"
+        "gemma2-9b-it",
+        "llama-3.2-3b-preview"
     ]
 
     for model_name in models:
@@ -1490,7 +1490,6 @@ HTML_TEMPLATE = """
                 placeholder.style.display = 'none';
 
                 userImage.onload = async () => {
-                    // Вычисляем точное положение и размеры отображаемой картинки
                     alignCanvasToImage();
 
                     if (faceMesh) {
@@ -1508,7 +1507,6 @@ HTML_TEMPLATE = """
             const wrapRect = scannerWrap.getBoundingClientRect();
             const imgRect = userImage.getBoundingClientRect();
 
-            // Точное позиционирование холста поверх рендерящейся картинки
             canvas.style.left = (imgRect.left - wrapRect.left) + 'px';
             canvas.style.top = (imgRect.top - wrapRect.top) + 'px';
             canvas.style.width = imgRect.width + 'px';
@@ -1575,7 +1573,6 @@ HTML_TEMPLATE = """
                 }
                 ctx.stroke();
             } else {
-                // Векторные контуры овала и глаз если Tesselation заблокирован CDN
                 drawLandmarkConnections(landmarks, w, h);
             }
 
@@ -1689,12 +1686,89 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-```
+"""
 
----
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE, data=None)
 
-### 🔥 Что исправлено:
-- **Groq API**: Добавлены активные быстрые модели (`llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`), поэтому лимит больше не блокирует работу сервиса.
-- **Синтез речи**: Функция `create_voice_note` сделана асинхронной, устранены ошибки `asyncio.run()` и предупреждения event loop.
-- **Гайд по отёкам**: Добавлена кнопка `🧊 Гайд: Как убрать отёки` с озвучкой и подробным протоколом.
-- **Точность маски MediaPipe**: Холст точнейшим образом выравнивается поверх `<img>`, овал и точки сажаются ровно на лицо.
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file"}), 400
+    file = request.files['file']
+
+    gender = request.form.get('gender', 'male')
+    user_id_str = request.form.get('user_id', '0')
+    user_id = int(user_id_str) if user_id_str.isdigit() else 0
+    user_name = request.form.get('user_name', 'Объект Анимуса')
+    user_username = request.form.get('user_username', '')
+
+    unique_id = f"{uuid.uuid4().hex}_{int(time.time())}"
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    filename = f"{unique_id}.{ext}"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+
+    archive_path = os.path.join(PHOTOS_DIR, f"web_user_{user_id}_{filename}")
+    cv2.imwrite(archive_path, cv2.imread(filepath))
+
+    rating, category, cat_class, color_hex, details, report = analyze_opencv(filepath, gender)
+
+    results_db[unique_id] = {
+        "rating": rating,
+        "category": category,
+        "cat_class": cat_class,
+        "color_hex": color_hex,
+        "details": details,
+        "report": report,
+        "gender": gender,
+        "image_filename": filename
+    }
+
+    def save_db_async():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        if user_id != 0:
+            loop.run_until_complete(db.register_user(user_id, user_username, user_name))
+        loop.run_until_complete(db.add_scan(unique_id, user_id, rating, category, gender, archive_path, source="web"))
+
+    threading.Thread(target=save_db_async, daemon=True).start()
+
+    logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
+
+    if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
+        def send_admin_photo_async():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                async def _send():
+                    bot_admin = Bot(token=BOT_TOKEN)
+                    admin_caption = (
+                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
+                        f"👤 **Имя:** {user_name}\n"
+                        f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
+                        f"🆔 **ID:** `{user_id}`\n"
+                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
+                    )
+                    photo_file = FSInputFile(filepath)
+                    await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
+                    await bot_admin.session.close()
+                loop.run_until_complete(_send())
+            except Exception as e:
+                logger.error(f"Ошибка отправки фото админу с сайта: {e}")
+
+        threading.Thread(target=send_admin_photo_async, daemon=True).start()
+
+    return jsonify({"rating": rating, "category": category, "id": unique_id})
+
+@app.route('/result/<result_id>')
+def show_result(result_id):
+    data = results_db.get(result_id)
+    return render_template_string(HTML_TEMPLATE, data=data)
+
+threading.Thread(target=start_telegram_bot, daemon=True).start()
+
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
