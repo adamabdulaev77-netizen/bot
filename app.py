@@ -417,7 +417,7 @@ def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     kb = [
         [KeyboardButton(text="📸 Проверить лицо"), KeyboardButton(text="📊 Мой профиль")],
-        [KeyboardButton(text="🧊 Гайд: Как убрать отёки"), KeyboardButton(text="🏆 Таблица категорий")],
+        [KeyboardButton(text="🧊 Гайд: Как убрать отёки")],
         [KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
     ]
     if ADMIN_ID and user_id == ADMIN_ID:
