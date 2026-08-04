@@ -1,20 +1,3 @@
-# ==============================================================================
-# 🌐 AESTHETIC VISION AI — ANIMUS MATRIX ULTIMATE (FACEMESH + MALE VOICE + GUIDE)
-# ==============================================================================
-# Требуемые зависимости (requirements.txt):
-# Flask>=3.0.0
-# opencv-python-headless>=4.8.0.76
-# numpy>=1.24.0
-# Pillow>=10.0.0
-# gunicorn>=21.2.0
-# aiogram>=3.0.0
-# aiosqlite>=0.19.0
-# aiohttp>=3.8.0
-# requests>=2.31.0
-# gTTS>=2.5.0
-# edge-tts>=6.1.9
-# ==============================================================================
-
 import os
 import sys
 import time
@@ -49,7 +32,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-# Попытка импорта синтезаторов речи (Приоритет: edge_tts для глубокого мужского голоса)
 try:
     import edge_tts
     EDGE_TTS_AVAILABLE = True
@@ -62,13 +44,9 @@ try:
 except ImportError:
     GTTS_AVAILABLE = False
 
-# ==============================================================================
-# ⚙️ ГЛОБАЛЬНАЯ КОНФИГУРАЦИЯ СИСТЕМЫ
-# ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
-# Ключ Groq API
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -96,14 +74,10 @@ logger = logging.getLogger("AnimusMatrixEnterprise")
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
 
-# FSM Состояния для сканирования лица
 class ScanStates(StatesGroup):
     waiting_for_gender = State()
     waiting_for_photo = State()
 
-# ==============================================================================
-# 🗄 МОДУЛЬ БАЗЫ ДАННЫХ (AIOSQLITE ENGINE)
-# ==============================================================================
 class DatabaseManager:
     def __init__(self, db_file: str):
         self.db_file = db_file
@@ -257,20 +231,17 @@ class DatabaseManager:
 
 db = DatabaseManager(DB_PATH)
 
-# ==============================================================================
-# 🎙 СИНТЕЗ ПРИЯТНОГО МУЖСКОГО ГОЛОСА (EDGE-TTS / GTTS ENGINE)
-# ==============================================================================
 async def _generate_male_voice_edge(text: str, filepath: str):
-    """Генерация реалистичного мужского голоса ru-RU-DmitryNeural через Edge-TTS"""
-    communicate = edge_tts.Communicate(text, "ru-RU-DmitryNeural")
+    """Генерация реалистичного мужского голоса ru-RU-DmitryNeural"""
+    communicate = edge_tts.Communicate(text, "ru-RU-DmitryNeural", rate="+0%", pitch="-2Hz")
     await communicate.save(filepath)
 
 def create_voice_note(text: str) -> Optional[str]:
-    """Генерация файла голосового сообщения с приятным тембром"""
+    """Генерация аудионарезки мужским естественным голосом"""
     if not (EDGE_TTS_AVAILABLE or GTTS_AVAILABLE):
         return None
     try:
-        clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '')
+        clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '').replace('~', '')
         if len(clean_text) > 400:
             clean_text = clean_text[:400] + "..."
 
@@ -279,14 +250,12 @@ def create_voice_note(text: str) -> Optional[str]:
 
         if EDGE_TTS_AVAILABLE:
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(_generate_male_voice_edge(clean_text, filepath))
-                loop.close()
-                if os.path.exists(filepath):
+                # Синхронный вызов async функции синтеза речи
+                asyncio.run(_generate_male_voice_edge(clean_text, filepath))
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                     return filepath
             except Exception as edge_err:
-                logger.warning(f"Edge-TTS error, falling back to gTTS: {edge_err}")
+                logger.warning(f"Edge-TTS synthesis error, using fallback: {edge_err}")
 
         if GTTS_AVAILABLE:
             tts = gTTS(text=clean_text, lang='ru', slow=False)
@@ -294,12 +263,9 @@ def create_voice_note(text: str) -> Optional[str]:
             return filepath
 
     except Exception as e:
-        logger.error(f"Ошибка создания голосового сообщения: {e}")
+        logger.error(f"Ошибка создания голосового файла: {e}")
     return None
 
-# ==============================================================================
-# 🧠 GROQ AI ДВИЖОК (ГЛУБОКИЙ АНАЛИЗ И ЧАТ)
-# ==============================================================================
 def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
@@ -423,9 +389,6 @@ def analyze_opencv(image_path: str, gender: str = "male"):
 
     return rating, cat, cat_cls, color, details, report
 
-# ==============================================================================
-# 🧊 ПОЛНЫЙ ЭКСПЕРТНЫЙ ГАЙД: КАК УБРАТЬ ОТЁКИ ЛИЦА ЗА 15 МИНУТ
-# ==============================================================================
 PUFFINESS_GUIDE_TEXT = (
     "🧊 **ПРОТОКОЛ ЛИМФОДРЕНАЖА: КАК УБРАТЬ ОТЁКИ ЛИЦА ЗА 15 МИНУТ**\n\n"
     "Отёчность — это задержка жидкости в подкожно-жировой клетчатке. Чтобы проявить угол челюсти, скуловые дуги и «высушить» овал лица, задействуй этот проверенный алгоритм:\n\n"
@@ -436,7 +399,7 @@ PUFFINESS_GUIDE_TEXT = (
     "• Нанеси лёгкую сыворотку или масло.\n"
     "• Скребком Гуаша или костяшками пальцев с умеренным нажимом двигайся строго **ОТ ЦЕНТРА К ПЕРИФЕРИИ** и далее вниз по боковым поверхностям шеи к ключицам, сбрасывая лимфу.\n\n"
     "3️⃣ **ВОДНО-СОЛЕВОЙ БАЛАНС**\n"
-    "• **Соль:** Сократи натрий за 4 часа до сна. Соль удерживает воду в пропорции 1г соли = 100мл застрявшей жидкости.\n"
+    "• **Соль:** Сократи натрий за 4 часа до сна. Соль удерживает воду в пропорции 1г соль = 100мл застрявшей жидкости.\n"
     "• **Питьевой режим:** Пей 2.5–3 литра чистой воды в день. Когда организм получает достаточно воды, он перестает её запасать.\n\n"
     "4️⃣ **ПРАВИЛЬНАЯ ПОЗА СНА**\n"
     "• Не спи лицом в подушку — это зажимает лимфатические протоки.\n"
@@ -445,9 +408,6 @@ PUFFINESS_GUIDE_TEXT = (
     "• Утром выпивай стакан теплой воды с лимоном или заваренный экстракт брусничного листа / зелёный чай с имбирём."
 )
 
-# ==============================================================================
-# 🤖 TELEGRAM BOT ROUTER & HANDLERS (AIOGRAM 3.X)
-# ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     kb = [
@@ -808,9 +768,6 @@ def start_telegram_bot():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(bot_worker())
 
-# ==============================================================================
-# 🎨 HIGH-TECH FRONTEND WITH MEDIAPIPE FACEMESH LASER SCANNER
-# ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -893,7 +850,7 @@ HTML_TEMPLATE = """
             -webkit-backdrop-filter: blur(30px);
             border: 1px solid var(--glass-border);
             border-radius: 24px;
-            padding: 36px 28px;
+            padding: 32px 24px;
             box-shadow: 0 0 60px rgba(0, 210, 255, 0.15),
                         inset 0 0 25px rgba(255, 255, 255, 0.03);
             animation: animusAppear 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -975,13 +932,14 @@ HTML_TEMPLATE = """
             border-color: var(--animus-cyan);
         }
 
-        /* 🎯 РАМКА СКАНЕРА С ЛАЗЕРОМ И BLUE FACEMESH */
+        /* 🎯 РАМКА СКАНЕРА С АДАПТИВНОЙ ВЫСОТОЙ */
         #scanner-wrap {
             position: relative;
             width: 100%;
-            height: 380px;
+            min-height: 360px;
+            max-height: 520px;
             border: 3px solid #1a1f2e;
-            border-radius: 12px;
+            border-radius: 14px;
             background: var(--animus-panel);
             overflow: hidden;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
@@ -1012,18 +970,16 @@ HTML_TEMPLATE = """
         }
 
         #user-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            max-width: 100%;
+            max-height: 500px;
+            object-fit: contain;
             display: none;
-            position: absolute;
-            top: 0; left: 0;
+            position: relative;
+            z-index: 2;
         }
 
         #overlay-canvas {
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
             z-index: 5;
             pointer-events: none;
             opacity: 0;
@@ -1081,6 +1037,8 @@ HTML_TEMPLATE = """
             background: #ffffff;
             box-shadow: 0 0 35px #ffffff;
         }
+
+        #file-input { display: none; }
 
         /* ЭКРАН РЕЗУЛЬТАТОВ */
         .result-screen {
@@ -1289,7 +1247,7 @@ HTML_TEMPLATE = """
                 <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
             </div>
 
-            <!-- 🎯 СКАНЕР С ЛАЗЕРОМ И MEDIAPIPE BLUE MESH -->
+            <!-- 🎯 СКАНЕР С ЛАЗЕРОМ И EXACT CANVAS OVERLAY -->
             <div id="scanner-wrap">
                 <div class="placeholder-text" id="placeholder">
                     [ ОЖИДАНИЕ ИЗОБРАЖЕНИЯ ]<br><br>
@@ -1468,7 +1426,7 @@ HTML_TEMPLATE = """
         }
         renderBg();
 
-        // 🎯 СКАНИРОВАНИЕ ЛИЦА ЧЕРЕЗ MEDIAPIPE И ЛАЗЕР
+        // 🎯 СКАНИРОВАНИЕ ЛИЦА С ТОЧНЫМ НАЛОЖЕНИЕМ КАНВАСА НА ФОТО
         {% if not data %}
         const scannerWrap = document.getElementById('scanner-wrap');
         const fileInput = document.getElementById('file-input');
@@ -1511,7 +1469,9 @@ HTML_TEMPLATE = """
         }
 
         uploadBtn.addEventListener('click', () => fileInput.click());
-        scannerWrap.addEventListener('click', () => fileInput.click());
+        scannerWrap.addEventListener('click', (e) => {
+            if (e.target !== fileInput) fileInput.click();
+        });
 
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -1525,9 +1485,8 @@ HTML_TEMPLATE = """
                 placeholder.style.display = 'none';
 
                 userImage.onload = async () => {
-                    canvas.width = userImage.clientWidth;
-                    canvas.height = userImage.clientHeight;
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    // Вычисляем точное положение и размеры отображаемой картинки
+                    alignCanvasToImage();
 
                     if (faceMesh) {
                         try {
@@ -1540,6 +1499,28 @@ HTML_TEMPLATE = """
             reader.readAsDataURL(file);
         });
 
+        function alignCanvasToImage() {
+            const wrapRect = scannerWrap.getBoundingClientRect();
+            const imgRect = userImage.getBoundingClientRect();
+
+            // Точное позиционирование холста поверх рендерящейся картинки
+            canvas.style.left = (imgRect.left - wrapRect.left) + 'px';
+            canvas.style.top = (imgRect.top - wrapRect.top) + 'px';
+            canvas.style.width = imgRect.width + 'px';
+            canvas.style.height = imgRect.height + 'px';
+
+            canvas.width = imgRect.width;
+            canvas.height = imgRect.height;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        window.addEventListener('resize', () => {
+            if (userImage.style.display === 'block') {
+                alignCanvasToImage();
+                if (currentLandmarks) drawPreciseBlueMesh(currentLandmarks);
+            }
+        });
+
         async function startScanProcess() {
             laser.classList.add('laser-active');
             canvas.style.opacity = 0;
@@ -1548,6 +1529,8 @@ HTML_TEMPLATE = """
             statusText.style.color = '#00d2ff';
 
             await new Promise(r => setTimeout(r, 1400));
+
+            alignCanvasToImage();
 
             if (currentLandmarks) {
                 drawPreciseBlueMesh(currentLandmarks);
@@ -1563,7 +1546,6 @@ HTML_TEMPLATE = """
 
             await new Promise(r => setTimeout(r, 1000));
 
-            // Отправка на сервер Flask для получения результатов
             sendPhotoToServer();
         }
 
@@ -1576,18 +1558,23 @@ HTML_TEMPLATE = """
             ctx.fillStyle = '#00ffff';
             ctx.lineWidth = 1;
 
-            if (typeof FACEMESH_TESSELATION !== 'undefined') {
+            if (typeof FACEMESH_TESSELATION !== 'undefined' && FACEMESH_TESSELATION) {
                 ctx.beginPath();
                 for (let i = 0; i < FACEMESH_TESSELATION.length; i++) {
                     const p1 = landmarks[FACEMESH_TESSELATION[i][0]];
                     const p2 = landmarks[FACEMESH_TESSELATION[i][1]];
-                    ctx.moveTo(p1.x * w, p1.y * h);
-                    ctx.lineTo(p2.x * w, p2.y * h);
+                    if (p1 && p2) {
+                        ctx.moveTo(p1.x * w, p1.y * h);
+                        ctx.lineTo(p2.x * w, p2.y * h);
+                    }
                 }
                 ctx.stroke();
+            } else {
+                // Векторные контуры овала и глаз если Tesselation заблокирован CDN
+                drawLandmarkConnections(landmarks, w, h);
             }
 
-            for (let i = 0; i < landmarks.length; i += 5) {
+            for (let i = 0; i < landmarks.length; i += 4) {
                 const x = landmarks[i].x * w;
                 const y = landmarks[i].y * h;
                 ctx.beginPath();
@@ -1596,14 +1583,23 @@ HTML_TEMPLATE = """
             }
         }
 
+        function drawLandmarkConnections(landmarks, w, h) {
+            ctx.beginPath();
+            for (let i = 0; i < landmarks.length - 1; i++) {
+                ctx.moveTo(landmarks[i].x * w, landmarks[i].y * h);
+                ctx.lineTo(landmarks[i+1].x * w, landmarks[i+1].y * h);
+            }
+            ctx.stroke();
+        }
+
         function drawFallbackMesh() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const w = canvas.width;
             const h = canvas.height;
             const cX = w / 2;
             const cY = h * 0.45;
-            const rX = w * 0.32;
-            const rY = h * 0.35;
+            const rX = w * 0.35;
+            const rY = h * 0.38;
 
             ctx.strokeStyle = '#00d2ff';
             ctx.fillStyle = '#00ffff';
@@ -1615,7 +1611,7 @@ HTML_TEMPLATE = """
             ctx.moveTo(cX, cY - rY); ctx.lineTo(cX, cY + rY);
             ctx.stroke();
 
-            for (let angle = 0; angle < Math.PI * 2; angle += 0.4) {
+            for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
                 let x = cX + Math.cos(angle) * rX;
                 let y = cY + Math.sin(angle) * rY;
                 ctx.beginPath();
@@ -1690,9 +1686,6 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ==============================================================================
-# 🛰 ROUTES (FLASK)
-# ==============================================================================
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE, data=None)
@@ -1772,7 +1765,6 @@ def show_result(result_id):
     data = results_db.get(result_id)
     return render_template_string(HTML_TEMPLATE, data=data)
 
-# Запуск бота в фоновом потоке
 threading.Thread(target=start_telegram_bot, daemon=True).start()
 
 if __name__ == '__main__':
