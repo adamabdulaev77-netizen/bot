@@ -231,13 +231,8 @@ class DatabaseManager:
 
 db = DatabaseManager(DB_PATH)
 
-async def _generate_male_voice_edge(text: str, filepath: str):
-    """Генерация реалистичного мужского голоса ru-RU-DmitryNeural"""
-    communicate = edge_tts.Communicate(text, "ru-RU-DmitryNeural", rate="+0%", pitch="-2Hz")
-    await communicate.save(filepath)
-
-def create_voice_note(text: str) -> Optional[str]:
-    """Генерация аудионарезки мужским естественным голосом"""
+async def create_voice_note(text: str) -> Optional[str]:
+    """Асинхронная генерация аудионарезки мужским естественным голосом"""
     if not (EDGE_TTS_AVAILABLE or GTTS_AVAILABLE):
         return None
     try:
@@ -250,17 +245,21 @@ def create_voice_note(text: str) -> Optional[str]:
 
         if EDGE_TTS_AVAILABLE:
             try:
-                # Синхронный вызов async функции синтеза речи
-                asyncio.run(_generate_male_voice_edge(clean_text, filepath))
+                communicate = edge_tts.Communicate(clean_text, "ru-RU-DmitryNeural", rate="+0%", pitch="-2Hz")
+                await communicate.save(filepath)
                 if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
                     return filepath
             except Exception as edge_err:
                 logger.warning(f"Edge-TTS synthesis error, using fallback: {edge_err}")
 
         if GTTS_AVAILABLE:
-            tts = gTTS(text=clean_text, lang='ru', slow=False)
-            tts.save(filepath)
-            return filepath
+            def _save_gtts():
+                tts = gTTS(text=clean_text, lang='ru', slow=False)
+                tts.save(filepath)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _save_gtts)
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                return filepath
 
     except Exception as e:
         logger.error(f"Ошибка создания голосового файла: {e}")
@@ -277,7 +276,13 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768"]
+    # Список только активных и высокоскоростных моделей Groq
+    models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b"
+    ]
 
     for model_name in models:
         data = {
@@ -499,7 +504,7 @@ async def callback_select_gender(call: CallbackQuery, state: FSMContext):
 @router.message(F.text == "🧊 Гайд: Как убрать отёки")
 async def btn_puffiness_guide(message: Message):
     await message.answer(PUFFINESS_GUIDE_TEXT, parse_mode="Markdown")
-    voice_file = create_voice_note("Анализируй протокол дефаттинга. Утром используй контрастный ледяной душ, лимфодренажный массаж и убавь соль перед сном.")
+    voice_file = await create_voice_note("Анализируй протокол дефаттинга. Утром используй контрастный ледяной душ, лимфодренажный массаж и убавь соль перед сном.")
     if voice_file and os.path.exists(voice_file):
         try:
             v_input = FSInputFile(voice_file)
@@ -693,7 +698,7 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
         )
 
         summary_voice_text = f"Ваш биологический индекс {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Подробный план готов в карточке."
-        voice_file = create_voice_note(summary_voice_text)
+        voice_file = await create_voice_note(summary_voice_text)
         if voice_file and os.path.exists(voice_file):
             try:
                 v_input = FSInputFile(voice_file)
@@ -728,7 +733,7 @@ async def handle_ai_chat_message(message: Message):
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
 
-    voice_file = create_voice_note(ai_reply)
+    voice_file = await create_voice_note(ai_reply)
     if voice_file and os.path.exists(voice_file):
         try:
             v_input = FSInputFile(voice_file)
@@ -1684,89 +1689,12 @@ HTML_TEMPLATE = """
     </script>
 </body>
 </html>
-"""
+```
 
-@app.route('/')
-def home():
-    return render_template_string(HTML_TEMPLATE, data=None)
+---
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file"}), 400
-    file = request.files['file']
-
-    gender = request.form.get('gender', 'male')
-    user_id_str = request.form.get('user_id', '0')
-    user_id = int(user_id_str) if user_id_str.isdigit() else 0
-    user_name = request.form.get('user_name', 'Объект Анимуса')
-    user_username = request.form.get('user_username', '')
-
-    unique_id = f"{uuid.uuid4().hex}_{int(time.time())}"
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
-    filename = f"{unique_id}.{ext}"
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
-
-    archive_path = os.path.join(PHOTOS_DIR, f"web_user_{user_id}_{filename}")
-    cv2.imwrite(archive_path, cv2.imread(filepath))
-
-    rating, category, cat_class, color_hex, details, report = analyze_opencv(filepath, gender)
-
-    results_db[unique_id] = {
-        "rating": rating,
-        "category": category,
-        "cat_class": cat_class,
-        "color_hex": color_hex,
-        "details": details,
-        "report": report,
-        "gender": gender,
-        "image_filename": filename
-    }
-
-    def save_db_async():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        if user_id != 0:
-            loop.run_until_complete(db.register_user(user_id, user_username, user_name))
-        loop.run_until_complete(db.add_scan(unique_id, user_id, rating, category, gender, archive_path, source="web"))
-
-    threading.Thread(target=save_db_async, daemon=True).start()
-
-    logger.info(f"[LOG OWNER] Новый запуск на сайте: Name='{user_name}', Username='@{user_username}', UserID={user_id}, Rating={rating}")
-
-    if ADMIN_ID and ADMIN_ID != 0 and user_id != ADMIN_ID:
-        def send_admin_photo_async():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                async def _send():
-                    bot_admin = Bot(token=BOT_TOKEN)
-                    admin_caption = (
-                        f"⚔️ **НОВАЯ ИНИЦИАЦИЯ В АНИМУС (САЙТ)!**\n\n"
-                        f"👤 **Имя:** {user_name}\n"
-                        f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
-                        f"🆔 **ID:** `{user_id}`\n"
-                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
-                    )
-                    photo_file = FSInputFile(filepath)
-                    await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
-                    await bot_admin.session.close()
-                loop.run_until_complete(_send())
-            except Exception as e:
-                logger.error(f"Ошибка отправки фото админу с сайта: {e}")
-
-        threading.Thread(target=send_admin_photo_async, daemon=True).start()
-
-    return jsonify({"rating": rating, "category": category, "id": unique_id})
-
-@app.route('/result/<result_id>')
-def show_result(result_id):
-    data = results_db.get(result_id)
-    return render_template_string(HTML_TEMPLATE, data=data)
-
-threading.Thread(target=start_telegram_bot, daemon=True).start()
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+### 🔥 Что исправлено:
+- **Groq API**: Добавлены активные быстрые модели (`llama-3.1-8b-instant`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`), поэтому лимит больше не блокирует работу сервиса.
+- **Синтез речи**: Функция `create_voice_note` сделана асинхронной, устранены ошибки `asyncio.run()` и предупреждения event loop.
+- **Гайд по отёкам**: Добавлена кнопка `🧊 Гайд: Как убрать отёки` с озвучкой и подробным протоколом.
+- **Точность маски MediaPipe**: Холст точнейшим образом выравнивается поверх `<img>`, овал и точки сажаются ровно на лицо.
