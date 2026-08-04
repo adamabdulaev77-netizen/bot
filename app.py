@@ -1,3 +1,20 @@
+# ==============================================================================
+# 🌐 AESTHETIC VISION AI — TRUE ADAM MATRIX ULTIMATE SINGLE-FILE
+# ==============================================================================
+# Requirements (requirements.txt):
+# Flask>=3.0.0
+# opencv-python-headless>=4.8.0.76
+# numpy>=1.24.0
+# Pillow>=10.0.0
+# gunicorn>=21.2.0
+# aiogram>=3.0.0
+# aiosqlite>=0.19.0
+# aiohttp>=3.8.0
+# requests>=2.31.0
+# gTTS>=2.5.0
+# edge-tts>=6.1.9
+# ==============================================================================
+
 import os
 import sys
 import time
@@ -44,6 +61,9 @@ try:
 except ImportError:
     GTTS_AVAILABLE = False
 
+# ==============================================================================
+# ⚙️ GLOBAL SYSTEM CONFIGURATION
+# ==============================================================================
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
@@ -69,7 +89,7 @@ logging.basicConfig(
         logging.FileHandler("app_execution.log", encoding="utf-8")
     ]
 )
-logger = logging.getLogger("AnimusMatrixEnterprise")
+logger = logging.getLogger("TrueAdamEnterprise")
 
 app = Flask(__name__, static_folder='static')
 results_db: Dict[str, Dict[str, Any]] = {}
@@ -78,6 +98,21 @@ class ScanStates(StatesGroup):
     waiting_for_gender = State()
     waiting_for_photo = State()
 
+PUFFINESS_GUIDE_TEXT = (
+    "🧊 **ПРОТОКОЛ: КАК УБРАТЬ ОТЁКИ ЗА 15 МИНУТ (ЛИМФОДРЕНАЖ)**\n\n"
+    "1️⃣ **Контрастное умывание:**\n"
+    "Поочередно умывайся теплой и ледяной водой (по 10 секунд, 5 циклов). Это моментально активирует микроциркуляцию.\n\n"
+    "2️⃣ **Лимфодренажный массаж (Гуаша / Пальцы):**\n"
+    "Двигайся строго по лимфотоку: от центра подбородка к мочкам ушей, от крыльев носа к вискам и вниз по шее к ключицам.\n\n"
+    "3️⃣ **Водный и натриевый баланс:**\n"
+    "Отёки появляются из-за задержки воды. Исключи соль, соусы и фастфуд на ночь. Выпей 500 мл чистой воды сразу после пробуждения.\n\n"
+    "4️⃣ **Зарядка и осанка:**\n"
+    "Сделай 20 легких прыжков на пятках и растяни шею. Это запустит лимфатическую систему организма."
+)
+
+# ==============================================================================
+# 🗄 DATABASE MANAGER (AIOSQLITE ENGINE)
+# ==============================================================================
 class DatabaseManager:
     def __init__(self, db_file: str):
         self.db_file = db_file
@@ -231,40 +266,42 @@ class DatabaseManager:
 
 db = DatabaseManager(DB_PATH)
 
+# ==============================================================================
+# 🎙 VOICE SYNTHESIS MODULE (EDGE-TTS / GTTS)
+# ==============================================================================
 async def create_voice_note(text: str) -> Optional[str]:
-    """Асинхронная генерация аудионарезки мужским естественным голосом"""
-    if not (EDGE_TTS_AVAILABLE or GTTS_AVAILABLE):
-        return None
-    try:
-        clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '').replace('~', '')
-        if len(clean_text) > 400:
-            clean_text = clean_text[:400] + "..."
+    """Generates a natural male voice note file"""
+    clean_text = text.replace('*', '').replace('_', '').replace('`', '').replace('#', '')
+    if len(clean_text) > 400:
+        clean_text = clean_text[:400] + "..."
 
-        filename = f"voice_{uuid.uuid4().hex[:8]}.mp3"
-        filepath = os.path.join(VOICE_DIR, filename)
+    filename = f"voice_{uuid.uuid4().hex[:8]}.mp3"
+    filepath = os.path.join(VOICE_DIR, filename)
 
-        if EDGE_TTS_AVAILABLE:
-            try:
-                communicate = edge_tts.Communicate(clean_text, "ru-RU-DmitryNeural", rate="+0%", pitch="-2Hz")
-                await communicate.save(filepath)
-                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                    return filepath
-            except Exception as edge_err:
-                logger.warning(f"Edge-TTS synthesis error, using fallback: {edge_err}")
+    if EDGE_TTS_AVAILABLE:
+        try:
+            communicate = edge_tts.Communicate(clean_text, voice="ru-RU-DmitryNeural")
+            await communicate.save(filepath)
+            return filepath
+        except Exception as e:
+            logger.warning(f"Edge-TTS synthesis warning, falling back: {e}")
 
-        if GTTS_AVAILABLE:
-            def _save_gtts():
+    if GTTS_AVAILABLE:
+        try:
+            loop = asyncio.get_running_loop()
+            def _gtts_save():
                 tts = gTTS(text=clean_text, lang='ru', slow=False)
                 tts.save(filepath)
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, _save_gtts)
-            if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-                return filepath
+            await loop.run_in_executor(None, _gtts_save)
+            return filepath
+        except Exception as e:
+            logger.error(f"GTTS error: {e}")
 
-    except Exception as e:
-        logger.error(f"Ошибка создания голосового файла: {e}")
     return None
 
+# ==============================================================================
+# 🧠 GROQ AI ENGINE
+# ==============================================================================
 def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
@@ -276,13 +313,7 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
         messages.append({"role": "system", "content": system_instruction})
     messages.append({"role": "user", "content": prompt})
 
-    # Оптимизированная цепочка активных моделей с автоматическим переключением при 429 rate limits
-    models = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "gemma2-9b-it",
-        "llama-3.2-3b-preview"
-    ]
+    models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "llama-3.2-3b-preview"]
 
     for model_name in models:
         data = {
@@ -291,14 +322,14 @@ def ask_groq_ai(prompt: str, system_instruction: str = "") -> str:
             "temperature": 0.7
         }
         try:
-            r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=12)
+            r = requests.post(GROQ_API_URL, json=data, headers=headers, timeout=10)
             if r.status_code == 200:
                 res_json = r.json()
                 return res_json["choices"][0]["message"]["content"].strip()
             else:
                 logger.warning(f"Groq model {model_name} status [{r.status_code}]: {r.text[:150]}")
         except Exception as e:
-            logger.error(f"Ошибка вызова Groq model {model_name}: {e}")
+            logger.error(f"Error calling Groq model {model_name}: {e}")
 
     return "⚠️ Произошла ошибка связи с нейросетью."
 
@@ -306,22 +337,27 @@ def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float
     gender_title = "МУЖЧИНА" if gender == "male" else "ЖЕНЩИНА"
     
     system_prompt = (
-        f"Ты — главный ИИ-эксперт сервиса Animus Matrix по биометрическому разбору лиц, Золотому Сечению и луксмаксингу. "
+        f"Ты — главный ИИ-эксперт сервиса TRUE ADAM (@TrueAdam_robot) по биометрическому разбору лиц, Золотому Сечению и луксмаксингу. "
         f"Объект анализа: {gender_title}.\n"
-        "Оценивай внешность строго, беспристрастно по шкале от 1.0 до 10.0.\n"
-        f"{'Акцент при анализе мужчины: угол челюсти, ширина подбородка, кантальный тильт, маскулинная резкость и пропорция третей.' if gender == 'male' else 'Акцент при анализе женщины: мягкость овала, пропорции губ и скул, гладкость кожи, симметрия глаз и эстетический баланс.'}\n\n"
+        "Оценивай внешность строго, объективно по шкале от 1.0 до 10.0.\n"
         "Верни ответ СТРОГО в формате JSON без markdown разметки:\n"
         '{\n'
         '  "rating": 7.2,\n'
         '  "category": "HTN",\n'
-        '  "pros": "1. Высокая симметрия овала лица (88%).\\n2. Четко выраженная дуга челюсти.\\n3. Отличный цветовой баланс и контраст кадра.",\n'
-        '  "cons": "1. Легкая асимметрия в области подбородка.\\n2. Сглаженная резкость в средней третьей части лица.\\n3. Небольшие отеки под глазами.",\n'
-        '  "recs": "1. ДЕФАТТИНГ И ЛИМФОДРЕНАЖ: Снизь процент жира в организме до 11-13% для максимального рельефа скул.\\n2. МЬЮИНГ И ОСАНКА: Сохраняй правильное положение языка у нёба и держи плечевой пояс.\\n3. УХОД ЗА КОЖЕЙ: Включи гиалуроновую кислоту и салициловый тоник от микроотеков.\\n4. ПРИЧЕСКА: Подбери объемную стрижку под форму овала.",\n'
+        '  "eyes_score": 7.5,\n'
+        '  "cheekbones_score": 7.0,\n'
+        '  "jaw_score": 7.8,\n'
+        '  "hair_score": 8.0,\n'
+        '  "skin_score": 7.2,\n'
+        '  "gender_score": 7.6,\n'
+        '  "pros": "1. Высокая симметрия овала лица (88%).\\n2. Четко выраженная челюстная дуга.\\n3. Отличный цветовой баланс и контраст кадра.",\n'
+        '  "cons": "1. Легкая асимметрия подбородка.\\n2. Сглаженная резкость деталей средней трети.",\n'
+        '  "recs": "1. ДЕФАТТИНГ: Снизь процент жира в организме до 11-13% для выделения скул.\\n2. МЬЮИНГ: Сохраняй правильное положение языка у нёба.",\n'
         '  "potential": "8.7 (CHAD)"\n'
         '}'
     )
 
-    prompt = f"Векторные данные кадра: Симметрия овала={sym_pct}%, Индекс контурной четкости={sharp_score}/10, Цветовой тон={harm_score}/10. Пол={gender_title}."
+    prompt = f"Векторные данные кадра: Симметрия={sym_pct}%, Индекс резкости={sharp_score}/10, Цветовой тон={harm_score}/10. Пол={gender_title}."
 
     response_text = ask_groq_ai(prompt, system_prompt)
     try:
@@ -331,6 +367,12 @@ def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float
         return (
             float(ai_json.get("rating", 6.0)),
             str(ai_json.get("category", "MTN")),
+            float(ai_json.get("eyes_score", 7.0)),
+            float(ai_json.get("cheekbones_score", 6.5)),
+            float(ai_json.get("jaw_score", 7.0)),
+            float(ai_json.get("hair_score", 7.5)),
+            float(ai_json.get("skin_score", 7.0)),
+            float(ai_json.get("gender_score", 7.2)),
             str(ai_json.get("pros", "1. Базовая симметрия овала.\n2. Удовлетворительный баланс пропорций.")),
             str(ai_json.get("cons", "1. Сглаженная линия челюсти.\n2. Недостаточный рельеф скуловых костей.")),
             str(ai_json.get("recs", "1. Снижай процент подкожного жира.\n2. Держи осанку и выполняй мьюинг.")),
@@ -345,15 +387,18 @@ def analyze_with_groq_deep(sym_pct: float, sharp_score: float, harm_score: float
     
     pros = f"1. Высокая симметрия овала ({sym_pct}%).\n2. Хороший цветовой баланс ({harm_score}/10)."
     cons = f"1. Сглаженная резкость деталей ({sharp_score}/10).\n2. Недостаточная выраженность скул."
-    recs = "1. Снижай процент подкожного жира.\n2. Делай лимфодренажный массаж Гуаша и исправь осанку."
+    recs = "1. Снижай процент подкожного жира.\n2. Делай массаж Гуаша и исправь осанку."
     pot = f"{min(10.0, rating + 1.5):.1f} (HTN/CHAD)"
 
-    return rating, cat, pros, cons, recs, pot
+    return rating, cat, rating, rating, rating, rating, rating, rating, pros, cons, recs, pot
 
 def analyze_opencv(image_path: str, gender: str = "male"):
     img = cv2.imread(image_path)
     if img is None:
-        return 5.0, "LTN", "cat-LTN", "#ffffff", {"symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0}, {
+        return 5.0, "LTN", "cat-LTN", "#ffffff", {
+            "symmetry": 50.0, "sharpness": 5.0, "harmony": 5.0,
+            "eyes": 5.0, "cheekbones": 5.0, "jaw": 5.0, "hair": 5.0, "skin": 5.0, "gender_feat": 5.0
+        }, {
             "pros": "1. Базовый баланс кадра.", "cons": "1. Не удалось прочитать детали кадра.", "recs": "1. Сделайте более четкий снимок.", "potential": "7.0 (MTN)"
         }
 
@@ -379,7 +424,7 @@ def analyze_opencv(image_path: str, gender: str = "male"):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     harm_score = round(min(10.0, max(1.0, (np.mean(hsv[:, :, 1]) / 25.5) * 0.5 + (np.mean(hsv[:, :, 2]) / 25.5) * 0.5)), 1)
 
-    rating, cat, pros, cons, recs, potential = analyze_with_groq_deep(sym_pct, sharp_score, harm_score, gender)
+    rating, cat, e_s, c_s, j_s, h_s, s_s, g_s, pros, cons, recs, potential = analyze_with_groq_deep(sym_pct, sharp_score, harm_score, gender)
 
     if rating < 3.0: cat_cls, color = "cat-SUB3", "#ff3333"
     elif rating < 5.0: cat_cls, color = "cat-SUB5", "#ff8833"
@@ -389,36 +434,29 @@ def analyze_opencv(image_path: str, gender: str = "male"):
     elif rating < 10.0: cat_cls, color = "cat-CHAD", "#00e5ff"
     else: cat_cls, color = "cat-TRUE_ADAM", "#ffd700"
 
-    details = {"symmetry": sym_pct, "sharpness": sharp_score, "harmony": harm_score}
+    details = {
+        "symmetry": sym_pct,
+        "sharpness": sharp_score,
+        "harmony": harm_score,
+        "eyes": e_s,
+        "cheekbones": c_s,
+        "jaw": j_s,
+        "hair": h_s,
+        "skin": s_s,
+        "gender_feat": g_s
+    }
     report = {"pros": pros, "cons": cons, "recs": recs, "potential": potential}
 
     return rating, cat, cat_cls, color, details, report
 
-PUFFINESS_GUIDE_TEXT = (
-    "🧊 **ПРОТОКОЛ ЛИМФОДРЕНАЖА: КАК УБРАТЬ ОТЁКИ ЛИЦА ЗА 15 МИНУТ**\n\n"
-    "Отёчность — это задержка жидкости в подкожно-жировой клетчатке. Чтобы проявить угол челюсти, скуловые дуги и «высушить» овал лица, задействуй этот проверенный алгоритм:\n\n"
-    "1️⃣ **КОНТРАСТНЫЙ ЛЕДЯНОЙ ДУШ ДЛЯ ЛИЦА (Утро)**\n"
-    "• Умойся тёплой водой (15 сек), затем максимально холодной водой (15 сек). Повтори 5 раз.\n"
-    "• Оберни кубик льда в тонкую ткань и проведи по лимфотокам: от центра подбородка к ушам, от крыльев носа к вискам.\n\n"
-    "2️⃣ **ЛИМФОДРЕНАЖНЫЙ МАССАЖ И ГУАША**\n"
-    "• Нанеси лёгкую сыворотку или масло.\n"
-    "• Скребком Гуаша или костяшками пальцев с умеренным нажимом двигайся строго **ОТ ЦЕНТРА К ПЕРИФЕРИИ** и далее вниз по боковым поверхностям шеи к ключицам, сбрасывая лимфу.\n\n"
-    "3️⃣ **ВОДНО-СОЛЕВОЙ БАЛАНС**\n"
-    "• **Соль:** Сократи натрий за 4 часа до сна. Соль удерживает воду в пропорции 1г соль = 100мл застрявшей жидкости.\n"
-    "• **Питьевой режим:** Пей 2.5–3 литра чистой воды в день. Когда организм получает достаточно воды, он перестает её запасать.\n\n"
-    "4️⃣ **ПРАВИЛЬНАЯ ПОЗА СНА**\n"
-    "• Не спи лицом в подушку — это зажимает лимфатические протоки.\n"
-    "• Используй ортопедическую подушку средней высоты, чтобы голова находилась чуть выше уровня тела.\n\n"
-    "5️⃣ **ПРИРОДНЫЕ ЛИМФОТОНИКИ**\n"
-    "• Утром выпивай стакан теплой воды с лимоном или заваренный экстракт брусничного листа / зелёный чай с имбирём."
-)
-
+# ==============================================================================
+# 🤖 TELEGRAM BOT ROUTER & HANDLERS
+# ==============================================================================
 def get_main_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     kb = [
         [KeyboardButton(text="📸 Проверить лицо"), KeyboardButton(text="📊 Мой профиль")],
-        [KeyboardButton(text="🧊 Гайд: Как убрать отёки")],
-        [KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
+        [KeyboardButton(text="🧊 Гайд: Как убрать отёки"), KeyboardButton(text="🌐 Открыть WebApp", web_app=WebAppInfo(url=server_url))]
     ]
     if ADMIN_ID and user_id == ADMIN_ID:
         kb.append([KeyboardButton(text="👨‍💻 Админ-панель")])
@@ -442,7 +480,7 @@ def get_admin_inline_keyboard() -> InlineKeyboardMarkup:
 def get_result_inline_keyboard(result_id: str, rating: float, category: str) -> InlineKeyboardMarkup:
     server_url = os.environ.get("RENDER_EXTERNAL_URL", RENDER_EXTERNAL_URL)
     web_app_url = f"{server_url}/result/{result_id}"
-    share_text = f"🔥 Мой генетический индекс внешности в Animus Matrix: {rating}/10 ({category})! Проверь себя:"
+    share_text = f"🔥 Мой генетический индекс внешности в TRUE ADAM: {rating}/10 ({category})! Проверь себя в @TrueAdam_robot:"
     share_url = f"https://t.me/share/url?url={web_app_url}&text={requests.utils.quote(share_text)}"
 
     buttons = [
@@ -459,8 +497,9 @@ async def cmd_start(message: Message, state: FSMContext):
     await db.register_user(message.from_user.id, message.from_user.username or "", message.from_user.first_name)
     welcome_text = (
         f"👋 **Привет, {message.from_user.first_name}!**\n\n"
-        "🔥 Я — ИИ-агент по биометрическому анализу привлекательности, пропорций и геометрии лица.\n\n"
-        "📸 **Нажми «📸 Проверить лицо»** или **задай любой вопрос** прямо в чат! 👇"
+        "🔥 Я — ИИ-агент TRUE ADAM по векторному анализу привлекательности, пропорций и геометрии лица.\n\n"
+        "📸 **Нажми «📸 Проверить лицо»** или **задай любой вопрос** прямо в чат! 👇\n\n"
+        "🏷 Bot: `@TrueAdam_robot`"
     )
     video_path = "logo.mp4"
     kb = get_main_keyboard(message.from_user.id)
@@ -504,13 +543,13 @@ async def callback_select_gender(call: CallbackQuery, state: FSMContext):
 @router.message(F.text == "🧊 Гайд: Как убрать отёки")
 async def btn_puffiness_guide(message: Message):
     await message.answer(PUFFINESS_GUIDE_TEXT, parse_mode="Markdown")
-    voice_file = await create_voice_note("Анализируй протокол дефаттинга. Утром используй контрастный ледяной душ, лимфодренажный массаж и убавь соль перед сном.")
+    voice_file = await create_voice_note("Прямо сейчас слушай главный протокол против отёков лица: умывайся ледяной водой, пей чистую воду и делай лимфодренажный массаж Гуаша.")
     if voice_file and os.path.exists(voice_file):
         try:
             v_input = FSInputFile(voice_file)
             await message.answer_voice(voice=v_input)
-        except Exception as ve:
-            logger.error(f"Ошибка отправки голосового файла гайда: {ve}")
+        except Exception as e:
+            logger.error(f"Ошибка отправки голосового гайда: {e}")
 
 @router.message(F.text == "📊 Мой профиль")
 async def btn_profile(message: Message):
@@ -521,23 +560,10 @@ async def btn_profile(message: Message):
         f"📈 **Проверок сделано:** {stats['scans']}\n"
         f"💬 **Вопросов ИИ:** {stats['chats']}\n"
         f"⭐ **Средний балл:** `{stats['avg_rating']} / 10`\n"
-        f"🔥 **Максимальный балл:** `{stats['max_rating']} / 10`"
+        f"🔥 **Максимальный балл:** `{stats['max_rating']} / 10`\n\n"
+        f"🏷 Bot: `@TrueAdam_robot`"
     )
     await message.answer(profile_text, parse_mode="Markdown")
-
-@router.message(F.text == "🏆 Таблица категорий")
-async def btn_categories(message: Message):
-    categories_text = (
-        "🏆 **КАТЕГОРИИ И РЕЙТИНГ ЛУКСМАКСИНГА:**\n\n"
-        "🔴 **1.0 - 2.9** — `SUB 3`\n"
-        "🟠 **3.0 - 4.9** — `SUB 5`\n"
-        "🟡 **5.0 - 5.9** — `LTN` (Low Tier Normal)\n"
-        "🟢 **6.0 - 6.9** — `MTN` (Mid Tier Normal)\n"
-        "❇️ **7.0 - 7.9** — `HTN` (High Tier Normal)\n"
-        "💎 **8.0 - 9.9** — `CHAD`\n"
-        "👑 **10.0** — `TRUE ADAM` (Золотое Сечение)"
-    )
-    await message.answer(categories_text, parse_mode="Markdown")
 
 @router.message(F.text == "👨‍💻 Админ-панель")
 @router.message(Command("admin"))
@@ -682,13 +708,22 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
             except Exception as adm_err:
                 logger.error(f"Не удалось отправить копию админу: {adm_err}")
 
+        gender_label = "Мужественность" if gender == "male" else "Женственность"
+
         detailed_text = (
             f"✅ **ПОЛНОЦЕННЫЙ БИОМЕТРИЧЕСКИЙ РАЗБОР:**\n\n"
             f"📊 **Твой рейтинг:** `{rating} / 10` ({category})\n"
             f"💎 **Потенциал:** `{report.get('potential', '8.5 CHAD')}`\n\n"
+            f"👁 **Глаза:** `{details.get('eyes', rating)} / 10`\n"
+            f"🦴 **Скулы:** `{details.get('cheekbones', rating)} / 10`\n"
+            f"📐 **Челюсть:** `{details.get('jaw', rating)} / 10`\n"
+            f"💇‍♂️ **Волосы:** `{details.get('hair', rating)} / 10`\n"
+            f"🧴 **Кожа:** `{details.get('skin', rating)} / 10`\n"
+            f"⚡ **{gender_label}:** `{details.get('gender_feat', rating)} / 10`\n\n"
             f"🔥 **ГЕНЕТИЧЕСКИЕ ПЛЮСЫ:**\n{report['pros']}\n\n"
             f"❌ **ЗОНЫ ДЕСИНХРОНИЗАЦИИ:**\n{report['cons']}\n\n"
-            f"💡 **ПОШАГОВЫЙ ПЛАН ПРОКАЧКИ:**\n{report['recs']}"
+            f"💡 **ПОШАГОВЫЙ ПЛАН ПРОКАЧКИ:**\n{report['recs']}\n\n"
+            f"🏷 `@TrueAdam_robot`"
         )
 
         await status_msg.edit_text(
@@ -697,7 +732,7 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
             reply_markup=get_result_inline_keyboard(scan_id, rating, category)
         )
 
-        summary_voice_text = f"Ваш биологический индекс {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Подробный план готов в карточке."
+        summary_voice_text = f"Анализ завершен. Ваш рейтинг {rating} из 10. Категория {category}. Подробные векторные оценки смотрите в карточке."
         voice_file = await create_voice_note(summary_voice_text)
         if voice_file and os.path.exists(voice_file):
             try:
@@ -721,13 +756,13 @@ async def handle_user_document(message: Message, state: FSMContext):
 
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
-    if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "🧊 Гайд: Как убрать отёки", "👨‍💻 Админ-панель"]:
+    if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🧊 Гайд: Как убрать отёки", "👨‍💻 Админ-панель"]:
         return
 
     status_msg = await message.answer("💬 *ИИ-агент обдумывает ответ...*", parse_mode="Markdown")
     
     loop = asyncio.get_event_loop()
-    sys_prompt = "Ты — ИИ-агент сервиса Animus Matrix. Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, коротко и содержательно."
+    sys_prompt = "Ты — ИИ-агент сервиса TRUE ADAM (@TrueAdam_robot). Эксперт по луксмаксингу, спорту, стилю и уходу. Отвечай прямо, коротко и содержательно."
     ai_reply = await loop.run_in_executor(None, ask_groq_ai, message.text, sys_prompt)
     
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
@@ -755,11 +790,7 @@ def start_telegram_bot():
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
         
-        try:
-            await bot.delete_webhook(drop_pending_updates=True)
-            await asyncio.sleep(2)
-        except Exception:
-            pass
+        await bot.delete_webhook(drop_pending_updates=True)
         
         logger.info("Телеграм-бот с Groq AI запущен.")
         try:
@@ -773,921 +804,783 @@ def start_telegram_bot():
     asyncio.set_event_loop(loop)
     loop.run_until_complete(bot_worker())
 
+# ==============================================================================
+# 🎨 TRUE ADAM LANDING PAGE & INTEGRATED SCANNER FRONTEND
+# ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ANIMUS 5.0 — Universal FaceMesh Laser Scanner</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- MediaPipe FaceMesh CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#07070a" />
+  <title>TRUE ADAM — Looksmaxxing Guide & Biometric AI | @TrueAdam_Robot</title>
 
-    <style>
-        :root {
-            --animus-dark: #030508;
-            --animus-panel: #0a0c12;
-            --animus-cyan: #00d2ff;
-            --animus-green: #00ff00;
-            --animus-red: #ff0033;
-            --animus-gold: #ffd700;
-            --glass-card: rgba(10, 16, 26, 0.88);
-            --glass-border: rgba(0, 210, 255, 0.28);
-            --font-title: 'Orbitron', monospace, sans-serif;
-            --font-body: 'Rajdhani', sans-serif;
-        }
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: var(--font-body);
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
+  <style>
+    :root {
+      --bg: #050507;
+      --bg-soft: #0b0b10;
+      --card: rgba(255,255,255,.055);
+      --card-strong: rgba(255,255,255,.09);
+      --line: rgba(255,255,255,.11);
+      --text: #f6f7fb;
+      --muted: #a4a7b5;
+      --cyan: #6cf5ff;
+      --blue: #6580ff;
+      --violet: #a56cff;
+      --pink: #ff7bd5;
+      --success: #7dffb2;
+      --gold: #ffd700;
+      --radius: 28px;
+      --shadow: 0 24px 80px rgba(0,0,0,.45);
+    }
 
-        body {
-            background-color: var(--animus-dark);
-            color: #ffffff;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow-x: hidden;
-            position: relative;
-            padding: 24px 12px;
-        }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: rgba(108,245,255,.65) #07070a; }
+    ::selection { background: rgba(108,245,255,.22); color: #fff; }
+    ::-webkit-scrollbar { width: 9px; }
+    ::-webkit-scrollbar-track { background: #07070a; }
+    ::-webkit-scrollbar-thumb { background: linear-gradient(var(--cyan), var(--violet)); border-radius: 20px; border: 2px solid #07070a; }
 
-        #bg-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
-        }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 15% 15%, rgba(101,128,255,.14), transparent 28%),
+        radial-gradient(circle at 85% 8%, rgba(165,108,255,.15), transparent 30%),
+        radial-gradient(circle at 60% 75%, rgba(108,245,255,.08), transparent 35%),
+        var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      cursor: default;
+    }
 
-        .scanlines {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-            background-size: 100% 3px, 6px 100%;
-            pointer-events: none;
-            z-index: 2;
-        }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), transparent 90%);
+      z-index: -3;
+    }
 
-        .animus-card {
-            position: relative;
-            z-index: 10;
-            width: 100%;
-            max-width: 560px;
-            background: var(--glass-card);
-            backdrop-filter: blur(30px);
-            -webkit-backdrop-filter: blur(30px);
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            padding: 32px 24px;
-            box-shadow: 0 0 60px rgba(0, 210, 255, 0.15),
-                        inset 0 0 25px rgba(255, 255, 255, 0.03);
-            animation: animusAppear 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-            clip-path: polygon(0 0, 96% 0, 100% 4%, 100% 100%, 4% 100%, 0 96%);
-        }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
 
-        @keyframes animusAppear {
-            from { opacity: 0; transform: scale(0.93) translateY(25px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-        }
+    .noise {
+      position: fixed; inset: 0; opacity: .035; pointer-events: none; z-index: 20;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.45'/%3E%3C/svg%3E");
+    }
 
-        .animus-corner {
-            position: absolute;
-            width: 18px;
-            height: 18px;
-            border: 2px solid var(--animus-cyan);
-            pointer-events: none;
-        }
-        .top-left { top: 8px; left: 8px; border-right: none; border-bottom: none; }
-        .bottom-right { bottom: 8px; right: 8px; border-left: none; border-top: none; }
+    .orb {
+      position: fixed; width: 420px; aspect-ratio: 1; border-radius: 50%; filter: blur(80px); opacity: .14; pointer-events: none; z-index: -2; transition: transform .2s linear;
+    }
+    .orb.one { background: var(--blue); top: 12%; left: -180px; }
+    .orb.two { background: var(--violet); right: -180px; bottom: 8%; }
 
-        .header {
-            text-align: center;
-            margin-bottom: 24px;
-            position: relative;
-        }
-        .header .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 18px;
-            border-radius: 6px;
-            background: rgba(0, 210, 255, 0.08);
-            border: 1px solid var(--animus-cyan);
-            font-family: var(--font-title);
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: var(--animus-cyan);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-            box-shadow: 0 0 20px rgba(0, 210, 255, 0.3);
-        }
-        .header h1 {
-            font-family: var(--font-title);
-            font-size: 2.1rem;
-            font-weight: 900;
-            letter-spacing: 3px;
-            background: linear-gradient(90deg, #ffffff, var(--animus-cyan), #ffffff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 30px rgba(0, 210, 255, 0.4);
-            text-transform: uppercase;
-        }
+    .container { width: min(1180px, calc(100% - 40px)); margin: 0 auto; }
 
-        .gender-selector {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 18px;
-            justify-content: center;
-        }
-        .gender-btn {
-            flex: 1;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #ffffff;
-            font-family: var(--font-title);
-            font-size: 0.8rem;
-            font-weight: 700;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: all 0.3s;
-        }
-        .gender-btn.active {
-            background: var(--animus-cyan);
-            color: #000000;
-            box-shadow: 0 0 20px var(--animus-cyan);
-            border-color: var(--animus-cyan);
-        }
+    .nav-wrap { position: fixed; left: 0; right: 0; top: 18px; z-index: 50; display: flex; justify-content: center; }
+    .nav {
+      width: min(1140px, calc(100% - 28px)); min-height: 68px; padding: 10px 12px 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid var(--line); background: rgba(8,8,12,.72); backdrop-filter: blur(22px); border-radius: 22px; box-shadow: 0 18px 60px rgba(0,0,0,.28);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: .08em; }
+    .brand-mark { width: 38px; height: 38px; border-radius: 13px; display: grid; place-items: center; background: linear-gradient(135deg, var(--cyan), var(--blue) 55%, var(--violet)); color: #050507; box-shadow: 0 0 35px rgba(108,245,255,.25); font-size: 18px; }
+    .brand-copy { display: flex; flex-direction: column; line-height: 1; gap: 5px; }
+    .brand-copy small { font-size: 9px; letter-spacing: .18em; color: var(--muted); font-weight: 650; }
 
-        /* 🎯 РАМКА СКАНЕРА С АДАПТИВНОЙ ВЫСОТОЙ */
-        #scanner-wrap {
-            position: relative;
-            width: 100%;
-            min-height: 360px;
-            max-height: 520px;
-            border: 3px solid #1a1f2e;
-            border-radius: 14px;
-            background: var(--animus-panel);
-            overflow: hidden;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
+    .nav-links { display: flex; gap: 6px; }
+    .nav-links a { padding: 12px 14px; border-radius: 14px; color: var(--muted); font-size: 14px; transition: .3s ease; }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); background: rgba(255,255,255,.07); }
 
-        /* ЗЕЛЕНАЯ ВСПЫШКА ВЕРИФИКАЦИИ */
-        #scanner-wrap.success-flash {
-            border-color: var(--animus-green) !important;
-            box-shadow: 0 0 50px rgba(0, 255, 0, 0.9), inset 0 0 20px rgba(0, 255, 0, 0.3) !important;
-        }
+    .nav-cta, .primary, .secondary { border: 0; border-radius: 16px; cursor: pointer; transition: transform .3s ease, box-shadow .3s ease, background .3s ease; }
+    .nav-cta { padding: 13px 17px; color: #07070a; font-weight: 800; background: linear-gradient(135deg, var(--cyan), #c6fbff); box-shadow: 0 10px 28px rgba(108,245,255,.2); }
+    .nav-cta:hover, .primary:hover, .secondary:hover { transform: translateY(-2px); }
 
-        .placeholder-text {
-            position: absolute;
-            color: #0088aa;
-            text-align: center;
-            padding: 30px;
-            line-height: 1.6;
-            font-family: var(--font-title);
-            font-size: 0.85rem;
-            pointer-events: none;
-            z-index: 1;
-        }
+    .hero { min-height: 100vh; display: grid; align-items: center; padding: 130px 0 60px; position: relative; }
+    .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; align-items: start; gap: 50px; }
 
-        #user-image {
-            max-width: 100%;
-            max-height: 500px;
-            object-fit: contain;
-            display: none;
-            position: relative;
-            z-index: 2;
-        }
+    .eyebrow { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; color: #d8dbea; background: rgba(255,255,255,.04); font-size: 13px; letter-spacing: .05em; text-transform: uppercase; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 16px var(--success); }
 
-        #overlay-canvas {
-            position: absolute;
-            z-index: 5;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
+    h1 { margin: 24px 0 20px; font-size: clamp(48px, 6.5vw, 92px); line-height: .92; letter-spacing: -.06em; max-width: 850px; }
+    .gradient-text { background: linear-gradient(100deg, #fff 5%, var(--cyan) 43%, var(--blue) 67%, var(--violet)); -webkit-background-clip: text; color: transparent; }
 
-        /* Сканирующий лазер */
-        .laser-line {
-            position: absolute;
-            top: -10px; left: 0;
-            width: 100%; height: 4px;
-            background: linear-gradient(90deg, transparent, #00ffff, #ffffff, #00ffff, transparent);
-            box-shadow: 0 0 15px #00ffff, 0 0 30px #00ffff;
-            display: none;
-            z-index: 10;
-        }
+    .hero p { max-width: 690px; color: var(--muted); font-size: clamp(16px, 1.8vw, 19px); line-height: 1.65; }
 
-        @keyframes scanAnimation {
-            0% { top: 0%; }
-            50% { top: 100%; }
-            100% { top: 0%; }
-        }
+    .hero-actions { display: flex; gap: 14px; margin-top: 28px; flex-wrap: wrap; }
+    .primary { padding: 16px 22px; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: #050507; font-weight: 850; box-shadow: 0 14px 34px rgba(101,128,255,.28); }
+    .secondary { padding: 16px 22px; background: rgba(255,255,255,.055); border: 1px solid var(--line); color: var(--text); }
 
-        .laser-active {
-            display: block;
-            animation: scanAnimation 2s ease-in-out infinite;
-        }
+    .micro { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 18px; color: #8f93a5; font-size: 13px; }
+    .micro span::before { content: "✦"; color: var(--cyan); margin-right: 8px; }
 
-        .status-box {
-            font-size: 0.9rem;
-            color: #8a99ad;
-            min-height: 24px;
-            text-align: center;
-            font-family: var(--font-title);
-            margin-bottom: 20px;
-        }
+    /* SCANNER WIDGET BOX */
+    .scanner-widget-card {
+      border: 1px solid var(--line);
+      background: rgba(12, 16, 26, 0.88);
+      backdrop-filter: blur(28px);
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 40px rgba(108,245,255,.12);
+      text-align: center;
+      position: relative;
+    }
 
-        .btn-animus {
-            width: 100%;
-            background: var(--animus-cyan);
-            color: #000000;
-            padding: 16px;
-            font-family: var(--font-title);
-            font-weight: 900;
-            font-size: 0.9rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            border: none;
-            box-shadow: 0 0 25px rgba(0, 210, 255, 0.5);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border-radius: 8px;
-        }
-        .btn-animus:hover {
-            background: #ffffff;
-            box-shadow: 0 0 35px #ffffff;
-        }
+    .gender-selector { display: flex; gap: 10px; margin-bottom: 16px; justify-content: center; }
+    .gender-btn {
+      flex: 1; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); color: #ffffff; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; border-radius: 12px; transition: all 0.3s;
+    }
+    .gender-btn.active { background: var(--cyan); color: #000000; box-shadow: 0 0 15px var(--cyan); }
 
-        #file-input { display: none; }
+    #scanner-wrap {
+      position: relative; width: 100%; max-height: 480px; aspect-ratio: 3/4; border: 2px solid var(--line); border-radius: 18px; background: #000000; overflow: hidden; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; cursor: pointer; transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    #scanner-wrap.success-flash {
+      border-color: var(--success) !important; box-shadow: 0 0 50px rgba(125,255,178,0.8), inset 0 0 20px rgba(125,255,178,0.3) !important;
+    }
 
-        /* ЭКРАН РЕЗУЛЬТАТОВ */
-        .result-screen {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            gap: 22px;
-        }
+    .placeholder-text { color: var(--cyan); font-family: 'Orbitron', sans-serif; font-size: 0.85rem; line-height: 1.6; }
+    #user-image { max-width: 100%; max-height: 100%; object-fit: contain; display: none; position: absolute; }
+    #overlay-canvas { position: absolute; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; }
 
-        .photo-container {
-            width: 100%;
-            height: 330px;
-            border-radius: 14px;
-            overflow: hidden;
-            border: 1px solid var(--glass-border);
-            background: #000000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
-        }
-        .photo-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
+    .laser-line {
+      position: absolute; top: -10px; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, transparent, var(--cyan), #ffffff, var(--cyan), transparent); box-shadow: 0 0 15px var(--cyan), 0 0 30px var(--cyan); display: none; z-index: 10;
+    }
+    @keyframes scanAnimation { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+    .laser-active { display: block; animation: scanAnimation 2s ease-in-out infinite; }
 
-        .gauge-box {
-            position: relative;
-            width: 200px;
-            height: 200px;
-        }
-        .gauge-box svg {
-            width: 100%;
-            height: 100%;
-            transform: rotate(-90deg);
-        }
-        .gauge-bg-track {
-            fill: none;
-            stroke: rgba(255, 255, 255, 0.06);
-            stroke-width: 12;
-        }
-        .gauge-fill-bar {
-            fill: none;
-            stroke: var(--animus-cyan);
-            stroke-width: 12;
-            stroke-linecap: square;
-            stroke-dasharray: 565.48;
-            stroke-dashoffset: 565.48;
-            transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .gauge-center {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-        }
-        .score-num {
-            font-family: var(--font-title);
-            font-size: 3.6rem;
-            font-weight: 900;
-            line-height: 1;
-            color: #ffffff;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
-        }
-        .score-lbl {
-            font-size: 0.78rem;
-            color: rgba(255, 255, 255, 0.45);
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-top: 4px;
-        }
+    .scan-status-bar {
+      background: rgba(108,245,255, 0.08); border: 1px solid var(--cyan); padding: 8px; border-radius: 10px; font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: var(--cyan); letter-spacing: 1.5px; margin-bottom: 16px; text-transform: uppercase;
+    }
 
-        .category-badge {
-            padding: 10px 36px;
-            font-family: var(--font-title);
-            font-size: 1.4rem;
-            font-weight: 900;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            border: 1px solid rgba(0, 210, 255, 0.5);
-            background: rgba(0, 210, 255, 0.06);
-            color: var(--animus-cyan);
-            box-shadow: 0 0 30px rgba(0, 210, 255, 0.25);
-            clip-path: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
-        }
+    .btn-blood {
+      width: 100%; background: linear-gradient(135deg, var(--cyan), var(--blue)); color: #000000; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 0.9rem; padding: 15px; border-radius: 14px; border: none; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 20px rgba(108,245,255, 0.4); transition: all 0.3s;
+    }
+    .btn-blood:hover { background: #ffffff; box-shadow: 0 0 30px #ffffff; transform: translateY(-2px); }
 
-        .metrics-card {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.015);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .metric-row { display: flex; flex-direction: column; gap: 6px; }
-        .metric-info { display: flex; justify-content: space-between; font-size: 0.88rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
-        .metric-name { color: rgba(255, 255, 255, 0.55); }
-        .metric-value { color: #ffffff; font-family: var(--font-title); }
-        .track-bar {
-            height: 6px;
-            background: rgba(255, 255, 255, 0.07);
-            border-radius: 3px;
-            overflow: hidden;
-        }
-        .fill-bar {
-            height: 100%; width: 0%;
-            background: var(--animus-cyan);
-            box-shadow: 0 0 12px var(--animus-cyan);
-            transition: width 1.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
+    .result-screen { display: none; flex-direction: column; align-items: center; gap: 18px; }
 
-        .report-box {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-        .report-card {
-            background: rgba(255, 255, 255, 0.015);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 18px;
-            text-align: left;
-        }
-        .report-title {
-            font-family: var(--font-title);
-            font-size: 0.85rem;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-        .title-pros { color: #ffffff; }
-        .title-cons { color: var(--animus-red); }
-        .title-recs { color: var(--animus-cyan); }
-        .title-pot { color: #ffd700; }
-        .report-text {
-            font-size: 0.9rem;
-            color: rgba(255, 255, 255, 0.82);
-            line-height: 1.5;
-            white-space: pre-line;
-        }
+    .gauge-box { position: relative; width: 170px; height: 180px; }
+    .gauge-box svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .gauge-bg-track { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 12; }
+    .gauge-fill-bar {
+      fill: none; stroke-width: 12; stroke-linecap: square; stroke-dasharray: 565.48; stroke-dashoffset: 565.48; transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .gauge-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
+    .score-num { font-family: 'Orbitron', sans-serif; font-size: 3.2rem; font-weight: 900; color: #ffffff; text-shadow: 0 0 15px rgba(255, 255, 255, 0.8); }
 
-        .action-buttons {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .btn-share {
-            width: 100%;
-            background: var(--animus-cyan);
-            border: 1px solid var(--animus-cyan);
-            color: #000000;
-            padding: 14px;
-            font-family: var(--font-title);
-            font-weight: 900;
-            font-size: 0.85rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            cursor: pointer;
-            box-shadow: 0 0 15px var(--animus-cyan);
-            transition: all 0.3s;
-            border-radius: 8px;
-        }
-        .btn-reload {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #ffffff;
-            padding: 14px;
-            font-family: var(--font-title);
-            font-weight: 800;
-            font-size: 0.85rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: all 0.3s;
-            border-radius: 8px;
-        }
-        .btn-reload:hover { background: #ffffff; color: #000000; }
-    </style>
+    .category-badge {
+      padding: 8px 30px; font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; border: 1px solid var(--cyan); background: rgba(108,245,255, 0.1); color: var(--cyan); border-radius: 10px;
+    }
+
+    .metrics-card {
+      width: 100%; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .metric-row { display: flex; flex-direction: column; gap: 4px; text-align: left; }
+    .metric-info { display: flex; justify-content: space-between; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+    .track-bar { height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: 3px; overflow: hidden; }
+    .fill-bar { height: 100%; width: 0%; background: var(--cyan); transition: width 1.5s; }
+
+    .report-box { width: 100%; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+    .report-card { background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .report-title { font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 800; margin-bottom: 4px; text-transform: uppercase; }
+
+    .watermark-footer { margin-top: 10px; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: var(--cyan); letter-spacing: 2px; text-shadow: 0 0 10px var(--cyan); }
+
+    /* MARQUEE & PILLARS */
+    .marquee { overflow: hidden; border-block: 1px solid var(--line); background: rgba(255,255,255,.02); transform: rotate(-1deg) scale(1.02); margin: 25px 0 70px; }
+    .marquee-track { display: flex; width: max-content; animation: marquee 26s linear infinite; }
+    .marquee-track span { padding: 16px 24px; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; color: #c9ccda; white-space: nowrap; }
+    .marquee-track i { color: var(--cyan); font-style: normal; }
+
+    section { padding: 90px 0; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 36px; }
+    .section-head h2 { font-size: clamp(36px, 5vw, 66px); letter-spacing: -.055em; margin: 12px 0 0; line-height: 1; }
+    .section-head p { color: var(--muted); max-width: 520px; line-height: 1.7; }
+
+    .tabs-shell { padding: 14px; border: 1px solid var(--line); border-radius: 32px; background: rgba(255,255,255,.035); box-shadow: var(--shadow); backdrop-filter: blur(20px); }
+    .tabs { display: flex; gap: 10px; padding: 6px; overflow-x: auto; position: relative; }
+    .tab-btn { flex: 1; min-width: 140px; padding: 15px 18px; color: var(--muted); background: transparent; border: 0; border-radius: 16px; cursor: pointer; transition: .3s ease; position: relative; z-index: 2; }
+    .tab-btn.active { color: var(--text); background: linear-gradient(135deg, rgba(108,245,255,.15), rgba(165,108,255,.16)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.09); }
+
+    .tab-panels { position: relative; min-height: 390px; }
+    .tab-panel { display: none; grid-template-columns: .85fr 1.15fr; gap: 18px; padding: 18px 6px 6px; opacity: 0; transform: translateY(14px); }
+    .tab-panel.active { display: grid; animation: panelIn .5s ease forwards; }
+
+    .feature-main, .feature-list > div, .card, .step, .faq-item {
+      border: 1px solid var(--line); background: linear-gradient(145deg, rgba(255,255,255,.07), rgba(255,255,255,.025)); backdrop-filter: blur(18px);
+    }
+    .feature-main { border-radius: 26px; padding: 28px; min-height: 350px; display: flex; flex-direction: column; justify-content: space-between; }
+    .feature-icon { font-size: 46px; }
+    .feature-main h3 { font-size: 34px; margin: 22px 0 12px; }
+    .feature-main p, .feature-list p { color: var(--muted); line-height: 1.65; }
+    .metric { display: flex; justify-content: space-between; align-items: end; border-top: 1px solid var(--line); padding-top: 20px; }
+    .metric strong { font-size: 38px; }
+    .metric span { color: var(--muted); font-size: 13px; }
+
+    .feature-list { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .feature-list > div { border-radius: 24px; padding: 24px; transition: .35s ease; }
+    .feature-list > div:hover { transform: translateY(-6px); background: rgba(255,255,255,.075); }
+    .feature-list h4 { font-size: 20px; margin: 0 0 8px; }
+
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .card { border-radius: 28px; padding: 28px; min-height: 270px; position: relative; overflow: hidden; transition: transform .35s ease, border-color .35s ease; }
+    .card:hover { border-color: rgba(255,255,255,.22); transform: translateY(-5px); }
+    .card-number { font-size: 12px; letter-spacing: .18em; color: var(--cyan); }
+    .card h3 { font-size: 26px; margin: 38px 0 12px; }
+    .card p { color: var(--muted); line-height: 1.65; }
+
+    .roadmap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .step { border-radius: 24px; padding: 24px; position: relative; overflow: hidden; }
+    .step span { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.075); color: var(--cyan); font-weight: 800; }
+    .step h3 { margin: 38px 0 10px; font-size: 22px; }
+    .step p { color: var(--muted); line-height: 1.55; font-size: 14px; }
+
+    .manifesto {
+      border: 1px solid var(--line); border-radius: 34px; padding: clamp(30px, 5vw, 70px);
+      background: radial-gradient(circle at 90% 20%, rgba(165,108,255,.15), transparent 30%), radial-gradient(circle at 10% 80%, rgba(108,245,255,.12), transparent 30%), rgba(255,255,255,.035);
+      text-align: center; box-shadow: var(--shadow);
+    }
+    .manifesto h2 { font-size: clamp(38px, 6vw, 80px); letter-spacing: -.065em; line-height: .95; margin: 0 0 22px; }
+    .manifesto p { max-width: 780px; margin: 0 auto; color: var(--muted); font-size: 18px; line-height: 1.7; }
+
+    .faq { display: grid; gap: 12px; max-width: 900px; margin: 0 auto; }
+    .faq-item { border-radius: 20px; overflow: hidden; }
+    .faq-q { width: 100%; border: 0; background: transparent; color: var(--text); text-align: left; padding: 22px 24px; display: flex; justify-content: space-between; gap: 20px; cursor: pointer; font-weight: 700; }
+    .faq-item.open .faq-q span:last-child { transform: rotate(45deg); }
+    .faq-a { max-height: 0; overflow: hidden; color: var(--muted); transition: max-height .4s ease, padding .4s ease; padding: 0 24px; line-height: 1.65; }
+    .faq-item.open .faq-a { max-height: 220px; padding: 0 24px 22px; }
+
+    footer { padding: 60px 0 35px; }
+    .footer-inner { border-top: 1px solid var(--line); padding-top: 28px; display: flex; justify-content: space-between; gap: 20px; color: var(--muted); font-size: 14px; }
+
+    .floating-telegram { position: fixed; right: 22px; bottom: 22px; z-index: 60; display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 18px; color: #071016; font-weight: 850; background: linear-gradient(135deg, var(--cyan), #fff); box-shadow: 0 16px 55px rgba(108,245,255,.27); transition: .35s ease; }
+    .floating-telegram:hover { transform: translateY(-5px) scale(1.02); }
+
+    .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    @keyframes marquee { to { transform: translateX(-50%); } }
+    @keyframes panelIn { to { opacity:1; transform:translateY(0); } }
+
+    @media (max-width: 980px) {
+      .nav-links { display: none; }
+      .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+      .cards, .roadmap { grid-template-columns: 1fr 1fr; }
+      .tab-panel { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      .container { width: min(100% - 24px, 1180px); }
+      .cards, .roadmap, .feature-list { grid-template-columns: 1fr; }
+      .section-head { flex-direction: column; align-items: start; }
+      .footer-inner { flex-direction: column; }
+    }
+  </style>
 </head>
 <body>
-    <div class="scanlines"></div>
-    <canvas id="bg-canvas"></canvas>
+  <div class="noise"></div>
+  <div class="orb one"></div>
+  <div class="orb two"></div>
 
-    <div class="animus-card">
-        <div class="animus-corner top-left"></div>
-        <div class="animus-corner bottom-right"></div>
+  <div class="nav-wrap">
+    <nav class="nav">
+      <a class="brand" href="#top"><span class="brand-mark">T</span><span class="brand-copy">TRUE ADAM<small>LOOKSMAXXING SYSTEM</small></span></a>
+      <div class="nav-links">
+        <a href="#scanner">ИИ-Сканер</a>
+        <a href="#pillars">Направления</a>
+        <a href="#system">Система</a>
+        <a href="#roadmap">План</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <a class="nav-cta" href="https://t.me/TrueAdam_Robot" target="_blank" rel="noopener">@TrueAdam_Robot</a>
+    </nav>
+  </div>
 
-        <div class="header">
-            <div class="badge">⚔️ ABSTERGO ANIMUS 5.0</div>
-            <h1>FACEMESH SCANNER</h1>
+  <main id="top">
+    <!-- HERO SECTION WITH INTEGRATED SCANNER -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy reveal">
+          <div class="eyebrow"><span class="dot"></span> TRUE ADAM • NEXT LEVEL SYSTEM</div>
+          <h1>Прокачай свою <span class="gradient-text">лучшую версию.</span></h1>
+          <p>Системный ИИ-анализ внешности: сканирование Золотого Сечения, пропорций лица и персональный план трансформации прямо в Telegram.</p>
+          <div class="hero-actions">
+            <a class="primary" href="https://t.me/TrueAdam_Robot" target="_blank" rel="noopener">➤ Открыть @TrueAdam_Robot</a>
+            <a class="secondary" href="#scanner">Запустить сканер лица</a>
+          </div>
+          <div class="micro">
+            <span>Точный векторный анализ ДНК</span>
+            <span>Без токсичных стандартов</span>
+            <span>Только факты и уход</span>
+          </div>
         </div>
 
-        {% if not data %}
-        <div id="scanUI">
-            <div class="gender-selector">
-                <button class="gender-btn active" id="btnMale" onclick="selectGender('male')">🚹 МУЖЧИНА</button>
-                <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
+        <!-- INTEGRATED SCANNER WIDGET -->
+        <div class="scanner-widget-card reveal" id="scanner">
+          <div style="font-family:'Orbitron',sans-serif; font-size:1.1rem; font-weight:800; color:var(--cyan); margin-bottom:6px;">ANIMUS MATRIX 5.0</div>
+          <div style="font-size:0.8rem; color:var(--muted); margin-bottom:14px; text-transform:uppercase;">Векторный биометрический анализ</div>
+
+          {% if not data %}
+          <div class="gender-selector">
+            <button class="gender-btn active" id="btnMale" onclick="selectGender('male')">🚹 МУЖЧИНА</button>
+            <button class="gender-btn" id="btnFemale" onclick="selectGender('female')">🚺 ЖЕНЩИНА</button>
+          </div>
+
+          <div class="scan-status-bar" id="status-text">Анализ лица, сопоставление пропорций</div>
+
+          <div id="scanner-wrap" onclick="document.getElementById('file-input').click()">
+            <div class="placeholder-text" id="placeholder">
+              [ ОЖИДАНИЕ ИЗОБРАЖЕНИЯ ]<br><br>
+              Нажмите или перетащите фото сюда
             </div>
+            <img id="user-image" alt="Target Face" crossorigin="anonymous">
+            <canvas id="overlay-canvas"></canvas>
+            <div class="laser-line" id="laser"></div>
+          </div>
 
-            <!-- 🎯 СКАНЕР С ЛАЗЕРОМ И EXACT CANVAS OVERLAY -->
-            <div id="scanner-wrap">
-                <div class="placeholder-text" id="placeholder">
-                    [ ОЖИДАНИЕ ИЗОБРАЖЕНИЯ ]<br><br>
-                    Кликните или перетащите фото
-                </div>
-                <img id="user-image" alt="Target" crossorigin="anonymous">
-                <canvas id="overlay-canvas"></canvas>
-                <div class="laser-line" id="laser"></div>
-            </div>
+          <button class="btn-blood" onclick="document.getElementById('file-input').click()">Загрузить фото</button>
+          <input type="file" id="file-input" accept="image/*">
+          {% endif %}
 
-            <div class="status-box" id="status-text">Инициализация ИИ...</div>
-
-            <button class="btn-animus" id="upload-btn">Загрузить фото</button>
-            <input type="file" id="file-input" accept="image/*">
-        </div>
-        {% endif %}
-
-        <!-- ЭКРАН РЕЗУЛЬТАТОВ -->
-        <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
-            <div class="photo-container">
-                <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" alt="Animus Scan">
+          <div class="result-screen" id="resultScreen" style="{% if data %}display:flex;{% endif %}">
+            <div id="scanner-wrap-res" style="height:260px; width:100%; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:#000;">
+              <img src="{% if data %}/static/uploads/{{ data.image_filename }}{% endif %}" style="width:100%; height:100%; object-fit:contain;" alt="Scan">
             </div>
 
             <div class="gauge-box">
-                <svg viewBox="0 0 200 200">
-                    <circle class="gauge-bg-track" cx="100" cy="100" r="90"></circle>
-                    <circle class="gauge-fill-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
-                </svg>
-                <div class="gauge-center">
-                    <div class="score-num" id="scoreNum">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
-                    <div class="score-lbl">Индекс DNA</div>
-                </div>
+              <svg viewBox="0 0 200 200">
+                <circle class="gauge-bg-track" cx="100" cy="100" r="90"></circle>
+                <circle class="gauge-fill-bar" id="gaugeBar" cx="100" cy="100" r="90"></circle>
+              </svg>
+              <div class="gauge-center">
+                <div class="score-num" id="scoreNum">{% if data %}{{ "%.1f"|format(data.rating) }}{% else %}0.0{% endif %}</div>
+              </div>
             </div>
 
-            <div class="category-badge {% if data %}{{ data.cat_class }}{% endif %}">
-                {% if data %}{{ data.category }}{% endif %}
-            </div>
+            <div class="category-badge">{% if data %}{{ data.category }}{% endif %}</div>
 
             {% if data %}
             <div class="metrics-card">
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Симметрия овала</span>
-                        <span class="metric-value">{{ data.details.symmetry }}%</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="symBar"></div>
-                    </div>
+              <div class="metric-row">
+                <div class="metric-info"><span>👁 Глаза</span><span>{{ data.details.eyes }}/10.0</span></div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.eyes * 10 }}%;"></div></div>
+              </div>
+              <div class="metric-row">
+                <div class="metric-info"><span>🦴 Скулы</span><span>{{ data.details.cheekbones }}/10.0</span></div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.cheekbones * 10 }}%;"></div></div>
+              </div>
+              <div class="metric-row">
+                <div class="metric-info"><span>📐 Челюсть</span><span>{{ data.details.jaw }}/10.0</span></div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.jaw * 10 }}%;"></div></div>
+              </div>
+              <div class="metric-row">
+                <div class="metric-info"><span>💇‍♂️ Волосы</span><span>{{ data.details.hair }}/10.0</span></div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.hair * 10 }}%;"></div></div>
+              </div>
+              <div class="metric-row">
+                <div class="metric-info"><span>🧴 Кожа</span><span>{{ data.details.skin }}/10.0</span></div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.skin * 10 }}%;"></div></div>
+              </div>
+              <div class="metric-row">
+                <div class="metric-info">
+                  <span>⚡ {% if data.gender == 'female' %}Женственность{% else %}Мужественность{% endif %}</span>
+                  <span>{{ data.details.gender_feat }}/10.0</span>
                 </div>
-
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Четкость геометрии</span>
-                        <span class="metric-value">{{ data.details.sharpness }}/10.0</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="sharpBar"></div>
-                    </div>
-                </div>
-
-                <div class="metric-row">
-                    <div class="metric-info">
-                        <span class="metric-name">Спектральный тон</span>
-                        <span class="metric-value">{{ data.details.harmony }}/10.0</span>
-                    </div>
-                    <div class="track-bar">
-                        <div class="fill-bar" id="harmBar"></div>
-                    </div>
-                </div>
+                <div class="track-bar"><div class="fill-bar" style="width: {{ data.details.gender_feat * 10 }}%;"></div></div>
+              </div>
             </div>
 
             <div class="report-box">
-                <div class="report-card">
-                    <div class="report-title title-pot">💎 Максимальный потенциал</div>
-                    <div class="report-text">{{ data.report.potential }}</div>
-                </div>
-                <div class="report-card">
-                    <div class="report-title title-pros">🔥 Генетические плюсы анатомии</div>
-                    <div class="report-text">{{ data.report.pros }}</div>
-                </div>
-                <div class="report-card">
-                    <div class="report-title title-cons">❌ Дессинхронизация и недостатки</div>
-                    <div class="report-text">{{ data.report.cons }}</div>
-                </div>
-                <div class="report-card">
-                    <div class="report-title title-recs">💡 Пошаговая инструкция прокачки</div>
-                    <div class="report-text">{{ data.report.recs }}</div>
-                </div>
+              <div class="report-card"><div class="report-title" style="color:var(--gold);">💎 Потенциал</div><div>{{ data.report.potential }}</div></div>
+              <div class="report-card"><div class="report-title" style="color:var(--success);">🔥 Плюсы</div><div>{{ data.report.pros }}</div></div>
+              <div class="report-card"><div class="report-title" style="color:var(--pink);">❌ Недостатки</div><div>{{ data.report.cons }}</div></div>
+              <div class="report-card"><div class="report-title" style="color:var(--cyan);">💡 Рекомендации</div><div>{{ data.report.recs }}</div></div>
             </div>
             {% endif %}
 
-            <div class="action-buttons">
-                {% if data %}
-                <button class="btn-share" onclick="shareResult()">📲 Поделиться результатом</button>
-                {% endif %}
-                <button class="btn-reload" onclick="location.href='/'">🔄 Новый сеанс Анимуса</button>
-            </div>
+            <button class="btn-blood" onclick="location.href='/'">🔄 Новый сеанс</button>
+          </div>
+
+          <div class="watermark-footer">@TrueAdam_robot</div>
         </div>
+      </div>
+    </section>
+
+    <!-- MARQUEE RIBBON -->
+    <div class="marquee" aria-hidden="true">
+      <div class="marquee-track">
+        <span><i>✦</i> FACE</span><span><i>✦</i> BODY</span><span><i>✦</i> STYLE</span><span><i>✦</i> ENERGY</span><span><i>✦</i> DISCIPLINE</span><span><i>✦</i> @TrueAdam_Robot</span>
+        <span><i>✦</i> FACE</span><span><i>✦</i> BODY</span><span><i>✦</i> STYLE</span><span><i>✦</i> ENERGY</span><span><i>✦</i> DISCIPLINE</span><span><i>✦</i> @TrueAdam_Robot</span>
+      </div>
     </div>
 
-    <script>
-        let selectedGender = 'male';
-        function selectGender(g) {
-            selectedGender = g;
-            document.getElementById('btnMale').classList.toggle('active', g === 'male');
-            document.getElementById('btnFemale').classList.toggle('active', g === 'female');
+    <!-- PILLARS SECTION -->
+    <section id="pillars">
+      <div class="container">
+        <div class="section-head reveal">
+          <div><span class="eyebrow">5 направлений</span><h2>Не маска. <br>Система.</h2></div>
+          <p>Лучший результат появляется, когда внешность поддерживается здоровьем, привычками и личным стилем.</p>
+        </div>
+
+        <div class="tabs-shell reveal">
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="face">Лицо и уход</button>
+            <button class="tab-btn" data-tab="body">Тело</button>
+            <button class="tab-btn" data-tab="style">Стиль</button>
+            <button class="tab-btn" data-tab="energy">Энергия</button>
+          </div>
+
+          <div class="tab-panels">
+            <div class="tab-panel active" id="face">
+              <div class="feature-main">
+                <div><div class="feature-icon">✦</div><h3>База ухода</h3><p>Очищение, увлажнение, SPF и аккуратный груминг. Минимум продуктов, максимум регулярности.</p></div>
+                <div class="metric"><strong>4 шага</strong><span>утром и вечером</span></div>
+              </div>
+              <div class="feature-list">
+                <div><h4>Кожа</h4><p>Мягкий уход, защита от солнца и постепенное внедрение активов.</p></div>
+                <div><h4>Волосы</h4><p>Форма, подходящая чертам лица, и здоровая кожа головы.</p></div>
+                <div><h4>Улыбка</h4><p>Гигиена, регулярные осмотры и натуральный ухоженный вид.</p></div>
+                <div><h4>Груминг</h4><p>Брови, борода, ногти и аккуратные детали, которые собирают образ.</p></div>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="body">
+              <div class="feature-main">
+                <div><div class="feature-icon">◌</div><h3>Форма и осанка</h3><p>Силовые тренировки, мобильность и питание без жестких ограничений.</p></div>
+                <div class="metric"><strong>3×</strong><span>тренировки в неделю</span></div>
+              </div>
+              <div class="feature-list">
+                <div><h4>Сила</h4><p>Базовые упражнения и постепенный прогресс.</p></div>
+                <div><h4>Осанка</h4><p>Сильная спина, мобильность и привычка держаться уверенно.</p></div>
+                <div><h4>Питание</h4><p>Белок, овощи, вода и нормальный режим без крайностей.</p></div>
+                <div><h4>Восстановление</h4><p>Сон и дни отдыха — часть прогресса, а не пауза.</p></div>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="style">
+              <div class="feature-main">
+                <div><div class="feature-icon">◇</div><h3>Личный код стиля</h3><p>Одежда должна усиливать человека, а не перекрывать его. Посадка важнее логотипа.</p></div>
+                <div class="metric"><strong>80 / 20</strong><span>база и акценты</span></div>
+              </div>
+              <div class="feature-list">
+                <div><h4>Силуэт</h4><p>Правильные пропорции делают образ собраннее.</p></div>
+                <div><h4>Цвет</h4><p>Небольшая палитра помогает легко сочетать вещи.</p></div>
+                <div><h4>Детали</h4><p>Обувь, аксессуары и фактуры создают характер.</p></div>
+                <div><h4>Аутентичность</h4><p>Лучший стиль узнаваем, но не выглядит костюмом.</p></div>
+              </div>
+            </div>
+
+            <div class="tab-panel" id="energy">
+              <div class="feature-main">
+                <div><div class="feature-icon">⌁</div><h3>Энергия и присутствие</h3><p>Выражение лица, голос, походка и спокойная уверенность часто заметнее идеальных черт.</p></div>
+                <div class="metric"><strong>7–9 ч</strong><span>здорового сна</span></div>
+              </div>
+              <div class="feature-list">
+                <div><h4>Сон</h4><p>Основа состояния кожи, аппетита и восстановления.</p></div>
+                <div><h4>Стресс</h4><p>Прогулки, дыхание и цифровые паузы возвращают фокус.</p></div>
+                <div><h4>Коммуникация</h4><p>Спокойный темп речи и зрительный контакт усиливают образ.</p></div>
+                <div><h4>Уверенность</h4><p>Она растет из выполненных обещаний самому себе.</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SYSTEM GRID -->
+    <section id="system">
+      <div class="container">
+        <div class="section-head reveal">
+          <div><span class="eyebrow">core system</span><h2>Маленькие детали. <br>Большой эффект.</h2></div>
+          <p>Не нужно менять всё сразу. Выбери несколько рычагов, которые реально можно удерживать месяцами.</p>
+        </div>
+
+        <div class="cards">
+          <article class="card reveal"><span class="card-number">01 / SKIN</span><h3>Чистая база</h3><p>Регулярный уход, SPF и терпение дают больше, чем хаотичная полка из десятков средств.</p></article>
+          <article class="card reveal"><span class="card-number">02 / BODY</span><h3>Сильный силуэт</h3><p>Осанка, плечи, спина и общий тонус визуально меняют впечатление от человека.</p></article>
+          <article class="card reveal"><span class="card-number">03 / STYLE</span><h3>Точная посадка</h3><p>Хорошо сидящая одежда почти всегда выглядит дороже и увереннее.</p></article>
+          <article class="card reveal"><span class="card-number">04 / HAIR</span><h3>Правильная форма</h3><p>Стрижка с учетом структуры волос и формы лица задает характер всему образу.</p></article>
+          <article class="card reveal"><span class="card-number">05 / SLEEP</span><h3>Восстановление</h3><p>Качественный сон поддерживает внешний вид, настроение и дисциплину.</p></article>
+          <article class="card reveal"><span class="card-number">06 / MINDSET</span><h3>Спокойная уверенность</h3><p>Цель — не стать копией чужого идеала, а выглядеть ухоженно и чувствовать себя сильнее.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROADMAP SECTION -->
+    <section id="roadmap">
+      <div class="container">
+        <div class="section-head reveal">
+          <div><span class="eyebrow">30-day roadmap</span><h2>План без перегруза.</h2></div>
+          <p>Простая последовательность, чтобы не сгореть на второй неделе.</p>
+        </div>
+        <div class="roadmap">
+          <div class="step reveal"><span>01</span><h3>Аудит</h3><p>Фото, гардероб, сон, уход и физическая активность. Без самокритики — только факты.</p></div>
+          <div class="step reveal"><span>02</span><h3>База</h3><p>Сон, вода, гигиена, простой уход и аккуратный внешний вид.</p></div>
+          <div class="step reveal"><span>03</span><h3>Система</h3><p>Тренировки, стрижка, стиль и новые привычки по одной за раз.</p></div>
+          <div class="step reveal"><span>04</span><h3>Калибровка</h3><p>Оставить работающие действия и убрать всё, что не даёт результата.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MANIFESTO -->
+    <section>
+      <div class="container">
+        <div class="manifesto reveal">
+          <h2>Не гонись за идеалом.<br><span class="gradient-text">Создай свою форму.</span></h2>
+          <p>Настоящий looksmaxxing — это уважение к себе, а не война с отражением. Улучшай то, что можешь контролировать, и не позволяй внешности определять твою ценность.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ SECTION -->
+    <section id="faq">
+      <div class="container">
+        <div class="section-head reveal">
+          <div><span class="eyebrow">questions</span><h2>FAQ</h2></div>
+          <p>Коротко о безопасном и устойчивом подходе.</p>
+        </div>
+        <div class="faq">
+          <div class="faq-item reveal"><button class="faq-q"><span>Что такое TRUE ADAM Looksmaxxing?</span><span>+</span></button><div class="faq-a">Это системное улучшение ухода, стиля, физической формы и общего впечатления. Здоровый подход не включает опасные эксперименты и навязчивое сравнение себя с другими.</div></div>
+          <div class="faq-item reveal"><button class="faq-q"><span>С чего лучше начать?</span><span>+</span></button><div class="faq-a">Со сканирования лица в нашем ИИ-боте, сна, гигиены, базового ухода, стрижки и одежды правильного размера.</div></div>
+          <div class="faq-item reveal"><button class="faq-q"><span>Нужны ли дорогие средства?</span><span>+</span></button><div class="faq-a">Нет. Регулярность, подходящие продукты и бережное отношение обычно важнее бренда и цены.</div></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <div><span style="font-weight:800; color:#fff;">TRUE ADAM</span> © 2026</div>
+      <div>Looksmaxxing system • Telegram: <a style="color:var(--cyan);" href="https://t.me/TrueAdam_Robot" target="_blank" rel="noopener">@TrueAdam_Robot</a></div>
+    </div>
+  </footer>
+
+  <a class="floating-telegram" href="https://t.me/TrueAdam_Robot" target="_blank" rel="noopener"><span>➤</span><span>@TrueAdam_Robot</span></a>
+
+  <script>
+    let selectedGender = 'male';
+    function selectGender(g) {
+      selectedGender = g;
+      document.getElementById('btnMale').classList.toggle('active', g === 'male');
+      document.getElementById('btnFemale').classList.toggle('active', g === 'female');
+    }
+
+    let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
+    if (window.Telegram && window.Telegram.WebApp) {
+      window.Telegram.WebApp.ready();
+      if (window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+        const u = window.Telegram.WebApp.initDataUnsafe.user;
+        tgUser.id = u.id || 0;
+        tgUser.name = (u.first_name || '') + ' ' + (u.last_name || '');
+        tgUser.username = u.username || '';
+      }
+    }
+
+    const fileInput = document.getElementById('file-input');
+    const userImage = document.getElementById('user-image');
+    const placeholder = document.getElementById('placeholder');
+    const laser = document.getElementById('laser');
+    const canvas = document.getElementById('overlay-canvas');
+    const ctx = canvas ? canvas.getContext('2d') : null;
+    const statusText = document.getElementById('status-text');
+
+    let faceMesh;
+    let currentLandmarks = null;
+
+    function initFaceMesh() {
+      if (typeof FaceMesh === 'undefined') return;
+      faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
+
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.1,
+        minTrackingConfidence: 0.1
+      });
+
+      faceMesh.onResults((results) => {
+        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+          currentLandmarks = results.multiFaceLandmarks[0];
+        } else {
+          currentLandmarks = null;
         }
+      });
+    }
 
-        let tgUser = { id: 0, name: 'Объект Анимуса', username: '' };
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.ready();
-            window.Telegram.WebApp.expand();
-            if (window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
-                const u = window.Telegram.WebApp.initDataUnsafe.user;
-                tgUser.id = u.id || 0;
-                tgUser.name = (u.first_name || '') + ' ' + (u.last_name || '');
-                tgUser.username = u.username || '';
-            }
-        }
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
 
-        // Анимированный фон 3D Сетки
-        const bgCanvas = document.getElementById('bg-canvas');
-        const bgCtx = bgCanvas.getContext('2d');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          userImage.src = event.target.result;
+          userImage.style.display = 'block';
+          placeholder.style.display = 'none';
 
-        function resizeBg() {
-            bgCanvas.width = window.innerWidth;
-            bgCanvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resizeBg);
-        resizeBg();
-
-        let animusLines = [];
-        for (let i = 0; i < 35; i++) {
-            animusLines.push({
-                x: Math.random() * bgCanvas.width,
-                length: Math.random() * 200 + 80,
-                speed: Math.random() * 3.5 + 1.2,
-                width: Math.random() * 2 + 0.5,
-                opacity: Math.random() * 0.35 + 0.1
-            });
-        }
-
-        let gridOffset = 0;
-        function renderBg() {
-            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-            gridOffset += 0.4;
-            bgCtx.strokeStyle = 'rgba(0, 210, 255, 0.035)';
-            bgCtx.lineWidth = 1;
-
-            const gridSize = 45;
-            for (let x = 0; x < bgCanvas.width; x += gridSize) {
-                bgCtx.beginPath();
-                bgCtx.moveTo(x, 0);
-                bgCtx.lineTo(x, bgCanvas.height);
-                bgCtx.stroke();
-            }
-            for (let y = (gridOffset % gridSize); y < bgCanvas.height; y += gridSize) {
-                bgCtx.beginPath();
-                bgCtx.moveTo(0, y);
-                bgCtx.lineTo(bgCanvas.width, y);
-                bgCtx.stroke();
-            }
-
-            animusLines.forEach(l => {
-                l.x += l.speed;
-                if (l.x > bgCanvas.width + l.length) l.x = -l.length;
-                bgCtx.strokeStyle = `rgba(0, 210, 255, ${l.opacity})`;
-                bgCtx.lineWidth = l.width;
-                bgCtx.beginPath();
-                bgCtx.moveTo(l.x - l.length, bgCanvas.height / 2 + (l.width * 60));
-                bgCtx.lineTo(l.x, bgCanvas.height / 2 + (l.width * 60));
-                bgCtx.stroke();
-            });
-
-            requestAnimationFrame(renderBg);
-        }
-        renderBg();
-
-        // 🎯 СКАНИРОВАНИЕ ЛИЦА С ТОЧНЫМ НАЛОЖЕНИЕМ КАНВАСА НА ФОТО
-        {% if not data %}
-        const scannerWrap = document.getElementById('scanner-wrap');
-        const fileInput = document.getElementById('file-input');
-        const uploadBtn = document.getElementById('upload-btn');
-        const userImage = document.getElementById('user-image');
-        const placeholder = document.getElementById('placeholder');
-        const laser = document.getElementById('laser');
-        const canvas = document.getElementById('overlay-canvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status-text');
-
-        let faceMesh;
-        let currentLandmarks = null;
-        let currentSelectedFile = null;
-
-        function initFaceMesh() {
-            try {
-                faceMesh = new FaceMesh({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-                });
-
-                faceMesh.setOptions({
-                    maxNumFaces: 1,
-                    refineLandmarks: true,
-                    minDetectionConfidence: 0.1,
-                    minTrackingConfidence: 0.1
-                });
-
-                faceMesh.onResults((results) => {
-                    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-                        currentLandmarks = results.multiFaceLandmarks[0];
-                    } else {
-                        currentLandmarks = null;
-                    }
-                });
-                statusText.innerText = 'Система готова к сканированию.';
-            } catch (e) {
-                statusText.innerText = 'Готов к сканированию.';
-            }
-        }
-
-        uploadBtn.addEventListener('click', () => fileInput.click());
-        scannerWrap.addEventListener('click', (e) => {
-            if (e.target !== fileInput) fileInput.click();
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            currentSelectedFile = file;
-
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                userImage.src = event.target.result;
-                userImage.style.display = 'block';
-                placeholder.style.display = 'none';
-
-                userImage.onload = async () => {
-                    alignCanvasToImage();
-
-                    if (faceMesh) {
-                        try {
-                            await faceMesh.send({ image: userImage });
-                        } catch(err) {}
-                    }
-                    startScanProcess();
-                };
-            };
-            reader.readAsDataURL(file);
-        });
-
-        function alignCanvasToImage() {
-            const wrapRect = scannerWrap.getBoundingClientRect();
-            const imgRect = userImage.getBoundingClientRect();
-
-            canvas.style.left = (imgRect.left - wrapRect.left) + 'px';
-            canvas.style.top = (imgRect.top - wrapRect.top) + 'px';
-            canvas.style.width = imgRect.width + 'px';
-            canvas.style.height = imgRect.height + 'px';
-
-            canvas.width = imgRect.width;
-            canvas.height = imgRect.height;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-
-        window.addEventListener('resize', () => {
-            if (userImage.style.display === 'block') {
-                alignCanvasToImage();
-                if (currentLandmarks) drawPreciseBlueMesh(currentLandmarks);
-            }
-        });
-
-        async function startScanProcess() {
-            laser.classList.add('laser-active');
-            canvas.style.opacity = 0;
-            scannerWrap.classList.remove('success-flash');
-            statusText.innerText = 'СКАНИРОВАНИЕ: Глубокий биометрический анализ...';
-            statusText.style.color = '#00d2ff';
-
-            await new Promise(r => setTimeout(r, 1400));
-
+          userImage.onload = async () => {
             alignCanvasToImage();
-
-            if (currentLandmarks) {
-                drawPreciseBlueMesh(currentLandmarks);
-            } else {
-                drawFallbackMesh();
+            if (faceMesh) {
+              await faceMesh.send({ image: userImage });
             }
+            startScanProcess(file);
+          };
+        };
+        reader.readAsDataURL(file);
+      });
+    }
 
-            canvas.style.opacity = 1;
-            statusText.innerText = '[ ВЕРИФИКАЦИЯ 100%: ЛИЦО ПОДТВЕРЖДЕНО ]';
-            statusText.style.color = '#00ff00';
-            laser.classList.remove('laser-active');
-            scannerWrap.classList.add('success-flash');
+    function alignCanvasToImage() {
+      if (!canvas || !userImage) return;
+      canvas.width = userImage.clientWidth;
+      canvas.height = userImage.clientHeight;
+      canvas.style.top = userImage.offsetTop + 'px';
+      canvas.style.left = userImage.offsetLeft + 'px';
+      canvas.style.width = userImage.clientWidth + 'px';
+      canvas.style.height = userImage.clientHeight + 'px';
+    }
 
-            await new Promise(r => setTimeout(r, 1000));
+    async function startScanProcess(file) {
+      laser.classList.add('laser-active');
+      canvas.style.opacity = 0;
+      statusText.innerText = 'Анализ лица, сопоставление пропорций...';
 
-            sendPhotoToServer();
+      await new Promise(r => setTimeout(r, 1200));
+
+      if (currentLandmarks) {
+        drawPreciseBlueMesh(currentLandmarks);
+      }
+
+      canvas.style.opacity = 1;
+      document.getElementById('scanner-wrap').classList.add('success-flash');
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('gender', selectedGender);
+      formData.append('user_id', tgUser.id);
+      formData.append('user_name', tgUser.name);
+      formData.append('user_username', tgUser.username);
+
+      try {
+        const response = await fetch('/analyze', { method: 'POST', body: formData });
+        const data = await response.json();
+        if (data.id) window.location.href = '/result/' + data.id;
+      } catch (err) {
+        location.reload();
+      }
+    }
+
+    function drawPreciseBlueMesh(landmarks) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.strokeStyle = '#6cf5ff';
+      ctx.fillStyle = '#6cf5ff';
+      ctx.lineWidth = 1;
+
+      if (typeof FACEMESH_TESSELATION !== 'undefined') {
+        ctx.beginPath();
+        for (let i = 0; i < FACEMESH_TESSELATION.length; i++) {
+          const p1 = landmarks[FACEMESH_TESSELATION[i][0]];
+          const p2 = landmarks[FACEMESH_TESSELATION[i][1]];
+          ctx.moveTo(p1.x * w, p1.y * h);
+          ctx.lineTo(p2.x * w, p2.y * h);
         }
+        ctx.stroke();
+      }
 
-        function drawPreciseBlueMesh(landmarks) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const w = canvas.width;
-            const h = canvas.height;
+      for (let i = 0; i < landmarks.length; i += 5) {
+        const x = landmarks[i].x * w;
+        const y = landmarks[i].y * h;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.2, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
 
-            ctx.strokeStyle = '#00d2ff';
-            ctx.fillStyle = '#00ffff';
-            ctx.lineWidth = 1;
+    window.addEventListener('load', initFaceMesh);
 
-            if (typeof FACEMESH_TESSELATION !== 'undefined' && FACEMESH_TESSELATION) {
-                ctx.beginPath();
-                for (let i = 0; i < FACEMESH_TESSELATION.length; i++) {
-                    const p1 = landmarks[FACEMESH_TESSELATION[i][0]];
-                    const p2 = landmarks[FACEMESH_TESSELATION[i][1]];
-                    if (p1 && p2) {
-                        ctx.moveTo(p1.x * w, p1.y * h);
-                        ctx.lineTo(p2.x * w, p2.y * h);
-                    }
-                }
-                ctx.stroke();
-            } else {
-                drawLandmarkConnections(landmarks, w, h);
-            }
+    {% if data %}
+    const rating = {{ data.rating }};
+    const gaugeBar = document.getElementById('gaugeBar');
+    const scoreNum = document.getElementById('scoreNum');
 
-            for (let i = 0; i < landmarks.length; i += 4) {
-                const x = landmarks[i].x * w;
-                const y = landmarks[i].y * h;
-                ctx.beginPath();
-                ctx.arc(x, y, 1.2, 0, 2 * Math.PI);
-                ctx.fill();
-            }
+    gaugeBar.style.stroke = "{{ data.color_hex }}";
+    const offset = (2 * Math.PI * 90) - (rating / 10.0) * (2 * Math.PI * 90);
+
+    setTimeout(() => {
+      gaugeBar.style.strokeDashoffset = offset;
+    }, 150);
+
+    let cur = 0.0;
+    const step = rating / 40.0;
+    const t = setInterval(() => {
+      cur += step;
+      if (cur >= rating) {
+        scoreNum.innerText = rating.toFixed(1);
+        clearInterval(t);
+      } else {
+        scoreNum.innerText = cur.toFixed(1);
+      }
+    }, 30);
+    {% endif %}
+
+    // TAB CONTROLS & INTERACTION
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('.tab-panel');
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const panel = document.getElementById(btn.dataset.tab);
+        if (panel) panel.classList.add('active');
+      });
+    });
+
+    // FAQ ACCORDION
+    document.querySelectorAll('.faq-q').forEach(button => {
+      button.addEventListener('click', () => {
+        const item = button.parentElement;
+        document.querySelectorAll('.faq-item').forEach(el => {
+          if (el !== item) el.classList.remove('open');
+        });
+        item.classList.toggle('open');
+      });
+    });
+
+    // REVEAL ANIMATIONS
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
         }
-
-        function drawLandmarkConnections(landmarks, w, h) {
-            ctx.beginPath();
-            for (let i = 0; i < landmarks.length - 1; i++) {
-                ctx.moveTo(landmarks[i].x * w, landmarks[i].y * h);
-                ctx.lineTo(landmarks[i+1].x * w, landmarks[i+1].y * h);
-            }
-            ctx.stroke();
-        }
-
-        function drawFallbackMesh() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const w = canvas.width;
-            const h = canvas.height;
-            const cX = w / 2;
-            const cY = h * 0.45;
-            const rX = w * 0.35;
-            const rY = h * 0.38;
-
-            ctx.strokeStyle = '#00d2ff';
-            ctx.fillStyle = '#00ffff';
-            ctx.lineWidth = 1;
-
-            ctx.beginPath();
-            ctx.ellipse(cX, cY, rX, rY, 0, 0, 2 * Math.PI);
-            ctx.moveTo(cX - rX, cY); ctx.lineTo(cX + rX, cY);
-            ctx.moveTo(cX, cY - rY); ctx.lineTo(cX, cY + rY);
-            ctx.stroke();
-
-            for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
-                let x = cX + Math.cos(angle) * rX;
-                let y = cY + Math.sin(angle) * rY;
-                ctx.beginPath();
-                ctx.moveTo(cX, cY);
-                ctx.lineTo(x, y);
-                ctx.stroke();
-            }
-        }
-
-        async function sendPhotoToServer() {
-            if (!currentSelectedFile) return;
-            const formData = new FormData();
-            formData.append('file', currentSelectedFile);
-            formData.append('gender', selectedGender);
-            formData.append('user_id', tgUser.id);
-            formData.append('user_name', tgUser.name);
-            formData.append('user_username', tgUser.username);
-
-            try {
-                const response = await fetch('/analyze', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.id) window.location.href = '/result/' + data.id;
-            } catch (err) {
-                alert('Десинхронизация с сервером');
-                location.reload();
-            }
-        }
-
-        window.addEventListener('load', initFaceMesh);
-        {% endif %}
-
-        function shareResult() {
-            const currentUrl = window.location.href;
-            const text = "🔥 Мой результат биометрического анализа лица в Animus Matrix! Посмотри карточку:";
-            const shareUrl = "https://t.me/share/url?url=" + encodeURIComponent(currentUrl) + "&text=" + encodeURIComponent(text);
-            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
-                window.Telegram.WebApp.openTelegramLink(shareUrl);
-            } else {
-                window.open(shareUrl, '_blank');
-            }
-        }
-
-        {% if data %}
-        const rating = {{ data.rating }};
-        const gaugeBar = document.getElementById('gaugeBar');
-        const scoreNum = document.getElementById('scoreNum');
-
-        gaugeBar.style.stroke = "{{ data.color_hex }}";
-        const offset = (2 * Math.PI * 90) - (rating / 10.0) * (2 * Math.PI * 90);
-
-        setTimeout(() => {
-            gaugeBar.style.strokeDashoffset = offset;
-            document.getElementById('symBar').style.width = "{{ data.details.symmetry }}%";
-            document.getElementById('sharpBar').style.width = "{{ (data.details.sharpness * 10.0) }}%";
-            document.getElementById('harmBar').style.width = "{{ (data.details.harmony * 10.0) }}%";
-        }, 150);
-
-        let cur = 0.0;
-        const step = rating / 40.0;
-        const t = setInterval(() => {
-            cur += step;
-            if (cur >= rating) {
-                scoreNum.innerText = rating.toFixed(1);
-                clearInterval(t);
-            } else {
-                scoreNum.innerText = cur.toFixed(1);
-            }
-        }, 30);
-        {% endif %}
-    </script>
+      });
+    }, { threshold: .1 });
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+  </script>
 </body>
 </html>
 """
 
+# ==============================================================================
+# 🛰 ROUTES (FLASK + ADMIN PHOTO FORWARDING)
+# ==============================================================================
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE, data=None)
@@ -1749,7 +1642,8 @@ def analyze():
                         f"👤 **Имя:** {user_name}\n"
                         f"🏷 **Юзернейм:** @{user_username if user_username else 'отсутствует'}\n"
                         f"🆔 **ID:** `{user_id}`\n"
-                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})"
+                        f"📊 **Рейтинг ДНК:** `{rating}/10` ({category})\n\n"
+                        f"🏷 `@TrueAdam_robot`"
                     )
                     photo_file = FSInputFile(filepath)
                     await bot_admin.send_photo(chat_id=ADMIN_ID, photo=photo_file, caption=admin_caption, parse_mode="Markdown")
