@@ -262,7 +262,6 @@ db = DatabaseManager(DB_PATH)
 # ==============================================================================
 async def _generate_male_voice_edge(text: str, filepath: str):
     """Генерация реалистичного мужского голоса ru-RU-DmitryNeural через Edge-TTS"""
-    import edge_tts
     communicate = edge_tts.Communicate(text, "ru-RU-DmitryNeural")
     await communicate.save(filepath)
 
@@ -540,7 +539,6 @@ async def callback_select_gender(call: CallbackQuery, state: FSMContext):
 @router.message(F.text == "🧊 Гайд: Как убрать отёки")
 async def btn_puffiness_guide(message: Message):
     await message.answer(PUFFINESS_GUIDE_TEXT, parse_mode="Markdown")
-    # Озвучка гайда приятным мужским голосом
     voice_file = create_voice_note("Анализируй протокол дефаттинга. Утром используй контрастный ледяной душ, лимфодренажный массаж и убавь соль перед сном.")
     if voice_file and os.path.exists(voice_file):
         try:
@@ -706,7 +704,6 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
 
         await db.add_scan(scan_id, message.from_user.id, rating, category, gender, saved_photo_path, source="bot")
 
-        # Отправка копии снимка админу
         if ADMIN_ID and ADMIN_ID != 0 and message.from_user.id != ADMIN_ID:
             try:
                 admin_caption = (
@@ -735,8 +732,7 @@ async def process_photo_message(message: Message, file_id: str, state: FSMContex
             reply_markup=get_result_inline_keyboard(scan_id, rating, category)
         )
 
-        # Озвучка результатов приятным глубоким мужским голосом
-        summary_voice_text = f"Ваш биологический индекс {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Полная инструкция готова в карточке."
+        summary_voice_text = f"Ваш биологический индекс {rating} из 10. Категория {category}. Потенциал {report.get('potential', 'высокий')}. Подробный план готов в карточке."
         voice_file = create_voice_note(summary_voice_text)
         if voice_file and os.path.exists(voice_file):
             try:
@@ -758,7 +754,6 @@ async def handle_user_document(message: Message, state: FSMContext):
     if message.document.mime_type and message.document.mime_type.startswith("image/"):
         await process_photo_message(message, message.document.file_id, state)
 
-# 💬 ОБРАБОТЧИК ЧАТА С ИИ-АГЕНТОМ (ТЕКСТ + ПРИЯТНЫЙ МУЖСКОЙ ГОЛОС)
 @router.message(F.text & ~F.text.startswith("/"))
 async def handle_ai_chat_message(message: Message):
     if message.text in ["📸 Проверить лицо", "📊 Мой профиль", "🏆 Таблица категорий", "🧊 Гайд: Как убрать отёки", "👨‍💻 Админ-панель"]:
@@ -773,7 +768,6 @@ async def handle_ai_chat_message(message: Message):
     await status_msg.edit_text(ai_reply, parse_mode="Markdown")
     await db.add_chat_log(message.from_user.id, message.text, ai_reply)
 
-    # Генерация приятного мужского голосового ответа
     voice_file = create_voice_note(ai_reply)
     if voice_file and os.path.exists(voice_file):
         try:
@@ -796,7 +790,11 @@ def start_telegram_bot():
         dp = Dispatcher(storage=MemoryStorage())
         dp.include_router(router)
         
-        await bot.delete_webhook(drop_pending_updates=True)
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            await asyncio.sleep(2)
+        except Exception:
+            pass
         
         logger.info("Телеграм-бот с Groq AI запущен.")
         try:
@@ -1084,7 +1082,7 @@ HTML_TEMPLATE = """
             box-shadow: 0 0 35px #ffffff;
         }
 
-        /* 🏆 ЭКРАН РЕЗУЛЬТАТОВ */
+        /* ЭКРАН РЕЗУЛЬТАТОВ */
         .result-screen {
             display: none;
             flex-direction: column;
@@ -1780,4 +1778,3 @@ threading.Thread(target=start_telegram_bot, daemon=True).start()
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-`
