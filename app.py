@@ -67,7 +67,7 @@ except ImportError:
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8483343132:AAErzKkD_F0f2Fd3DHRyf0pi1SqT9ZYv5Tk")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "1175620687"))
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "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")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "http://127.0.0.1:5000")
